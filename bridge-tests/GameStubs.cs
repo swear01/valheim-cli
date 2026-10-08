@@ -35,5 +35,5 @@ public sealed class Player
     public bool IsDead() => Dead;
     public bool IsTeleporting() => Teleporting;
     public bool TeleportTo(UnityEngine.Vector3 target, UnityEngine.Quaternion rotation, bool distant) { if (AcceptTeleport) Teleporting = true; return AcceptTeleport; }
-    public static List<Player> GetAllPlayers() => m_localPlayer == null ? new() : new() { m_localPlayer };
+    public static List<Player> GetAllPlayers() => m_localPlayer == null ? new() : new() { null, m_localPlayer };
 }

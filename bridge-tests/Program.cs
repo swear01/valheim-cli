@@ -65,6 +65,7 @@ static class Program
         var teleport = Valid("teleport"); teleport.x = 1; teleport.y = 2; teleport.z = 3;
         Assert(!Execute(teleport).ok, "No-player teleport accepted");
         Player.m_localPlayer = new Player(); ZNet.instance = new ZNet { Host = true };
+        Assert(Execute(Valid("players")).players.Length == 1, "Null player object broke listing");
         Assert(!Execute(teleport).ok, "Disabled teleport accepted");
         permission.Value = true; ZNet.instance.Host = false;
         Assert(!Execute(teleport).ok, "Joining client write accepted");

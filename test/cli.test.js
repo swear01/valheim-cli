@@ -16,6 +16,7 @@ test('CLI rejects unsafe or ambiguous inputs before connecting', async () => {
     await assert.rejects(main(args));
   }
   assert.match((await main(['--help'])).help, /--confirm/);
+  await assert.rejects(main(['status', '--profile', 'does-not-exist']), /Start Valheim/);
 });
 
 test('Installer verifies checksum, preserves other files/configs and refuses replacement', async () => {
@@ -23,6 +24,7 @@ test('Installer verifies checksum, preserves other files/configs and refuses rep
   try {
     const profile = join(root, 'profile');
     const artifact = join(root, 'artifact');
+    await assert.rejects(install(profile, artifact), /existing BepInEx profile/);
     await mkdir(join(profile, 'BepInEx', 'core'), { recursive: true });
     await mkdir(join(profile, 'BepInEx', 'config'), { recursive: true });
     await mkdir(artifact);

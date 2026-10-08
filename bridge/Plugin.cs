@@ -53,7 +53,7 @@ namespace ValheimCliBridge
                 teleporting = local != null && local.IsTeleporting()
             };
             if (request.operation == "players")
-                response.players = Player.GetAllPlayers().Select(p => p.GetPlayerName()).ToArray();
+                response.players = Player.GetAllPlayers().Where(p => p != null).Select(p => p.GetPlayerName()).ToArray();
             if (request.operation == "teleport")
             {
                 if (!response.inWorld) return Response.Error(request.id, "No local player in world");

@@ -20,9 +20,14 @@ async function safeDirectory(path) {
 }
 
 export async function install(profile, artifactRoot = fileURLToPath(new URL('../bridge-dist/', import.meta.url))) {
-  profile = await realpath(profile);
+  try {
+    profile = await realpath(profile);
+    if (!(await stat(join(profile, 'BepInEx', 'core', 'BepInEx.dll'))).isFile()) throw new Error('Choose an existing BepInEx profile');
+  } catch (error) {
+    if (['ENOENT', 'ENOTDIR'].includes(error.code)) throw new Error('Choose an existing BepInEx profile');
+    throw error;
+  }
   const plugins = join(profile, 'BepInEx', 'plugins');
-  if (!(await stat(join(profile, 'BepInEx', 'core', 'BepInEx.dll'))).isFile()) throw new Error('Choose an existing BepInEx profile');
   const manifest = JSON.parse(await readFile(join(artifactRoot, 'manifest.json'), 'utf8'));
   const source = join(artifactRoot, 'ValheimCliBridge.dll');
   const expected = manifest.sha256;
@@ -91,6 +96,12 @@ export async function main(args) {
     }
     coordinates = Object.fromEntries(['x', 'y', 'z'].map((axis, index) => [axis, numbers[index]]));
   }
-  const token = (await readFile(join(profile, 'BepInEx', 'config', 'swear01.ValheimCliBridge.token'), 'utf8')).trim();
+  let token;
+  try {
+    token = (await readFile(join(profile, 'BepInEx', 'config', 'swear01.ValheimCliBridge.token'), 'utf8')).trim();
+  } catch (error) {
+    if (error.code === 'ENOENT') throw new Error('Bridge token not found. Start Valheim with the plugin installed, then try again.');
+    throw error;
+  }
   return request({ port, token, operation: command, id, ...coordinates });
 }
