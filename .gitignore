@@ -1,0 +1,7 @@
+node_modules/
+*.tgz
+**/bin/
+**/obj/
+!/bin/
+bridge-dist/
+*.token
