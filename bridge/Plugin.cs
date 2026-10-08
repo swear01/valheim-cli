@@ -30,10 +30,14 @@ namespace ValheimCliBridge
                 var token = File.ReadAllText(tokenPath).Trim();
                 if (token.Length != 64 || token.Any(c => !"0123456789abcdef".Contains(c))) throw new InvalidDataException("Invalid local token file");
                 dispatcher = new Dispatcher(Execute);
-                server = new Server(port.Value, token, dispatcher);
+                server = new Server(port.Value, token, dispatcher, error => Logger.LogError("CLI bridge connection failed: " + error.GetType().Name));
                 Logger.LogInfo("CLI bridge listening on 127.0.0.1:" + port.Value + "; token stored in local config folder. Never share it.");
             }
-            catch (Exception error) { Logger.LogError("CLI bridge did not start: " + error.GetType().Name); }
+            catch (Exception error)
+            {
+                Logger.LogError("CLI bridge did not start: " + error.GetType().Name +
+                    (error is InvalidDataException ? "; stop the game, delete swear01.ValheimCliBridge.token from the config folder, and restart." : "; check the config folder permissions and whether the configured port is already in use."));
+            }
         }
         private void Update() { dispatcher?.Pump(); }
         private void OnDestroy() { server?.Dispose(); }
@@ -53,14 +57,14 @@ namespace ValheimCliBridge
                 teleporting = local != null && local.IsTeleporting()
             };
             if (request.operation == "players")
-                response.players = Player.GetAllPlayers().Where(p => p != null).Select(p => p.GetPlayerName()).ToArray();
+                response.players = (Player.GetAllPlayers() ?? Enumerable.Empty<Player>()).Where(p => p != null).Select(p => p.GetPlayerName()).ToArray();
             if (request.operation == "teleport")
             {
-                if (!response.inWorld) return Response.Error(request.id, "No local player in world");
-                if (!response.teleportAllowed) return Response.Error(request.id, "Teleport requires local host and AllowTeleport=true");
-                if (local.IsDead() || local.IsTeleporting()) return Response.Error(request.id, "Player dead or already teleporting");
+                if (!response.inWorld) return Response.Error(request.id, "No local player in world", "cancelled");
+                if (!response.teleportAllowed) return Response.Error(request.id, "Teleport requires local host and AllowTeleport=true", "cancelled");
+                if (local.IsDead() || local.IsTeleporting()) return Response.Error(request.id, "Player dead or already teleporting", "cancelled");
                 var target = new Vector3((float)request.x.Value, (float)request.y.Value, (float)request.z.Value);
-                if (!local.TeleportTo(target, local.transform.rotation, true)) return Response.Error(request.id, "Game refused teleport");
+                if (!local.TeleportTo(target, local.transform.rotation, true)) return Response.Error(request.id, "Game refused teleport", "cancelled");
                 response.state = "started";
                 response.destination = PositionOf(target);
                 response.teleporting = true;

@@ -13,17 +13,19 @@ namespace ValheimCliBridge
         private readonly TcpListener listener;
         private readonly Dispatcher dispatcher;
         private readonly string token;
+        private readonly Action<Exception> logError;
         private readonly Thread thread;
         private volatile bool stopped;
         private TcpClient active;
         private readonly object gate = new object();
         private readonly HashSet<string> writes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public int Port => ((IPEndPoint)listener.LocalEndpoint).Port;
-        public Server(int port, string token, Dispatcher dispatcher)
+        public Server(int port, string token, Dispatcher dispatcher, Action<Exception> logError)
         {
             if (token == null || token.Length != 64) throw new ArgumentException("Invalid token");
             this.token = token;
             this.dispatcher = dispatcher;
+            this.logError = logError;
             listener = new TcpListener(IPAddress.Loopback, port);
             listener.Start(8);
             thread = new Thread(Listen) { IsBackground = true, Name = "ValheimCliBridge" };
@@ -54,6 +56,7 @@ namespace ValheimCliBridge
                                 {
                                     if (request.operation == "teleport") writes.Add(request.id);
                                     response = dispatcher.Run(request);
+                                    if (request.operation == "teleport" && response.state == "cancelled") writes.Remove(request.id);
                                 }
                             }
                             catch { response = Response.Error(null, "Invalid request"); }
@@ -67,6 +70,7 @@ namespace ValheimCliBridge
                 catch (SerializationException) { }
                 catch (SocketException) { if (stopped) return; }
                 catch (ObjectDisposedException) { if (stopped) return; }
+                catch (Exception error) { if (stopped) return; logError(error); }
             }
         }
         public void Dispose()

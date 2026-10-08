@@ -35,6 +35,7 @@ test('Installer verifies checksum, preserves other files/configs and refuses rep
     await writeFile(join(artifact, 'manifest.json'), JSON.stringify({ version: '0.1.0', sha256: createHash('sha256').update(dll).digest('hex') }));
     const first = await install(profile, artifact);
     assert.equal(first.state, 'installed');
+    if (process.platform === 'win32') assert.equal((await install(profile.toUpperCase(), artifact)).state, 'installed');
     assert.equal((await install(profile, artifact)).state, 'installed');
     assert.equal(await readFile(join(profile, 'BepInEx', 'config', 'other.cfg'), 'utf8'), 'preserve');
     await writeFile(first.path, 'different');
@@ -42,6 +43,12 @@ test('Installer verifies checksum, preserves other files/configs and refuses rep
     await rm(first.path);
     await symlink(join(profile, 'BepInEx', 'config', 'other.cfg'), first.path);
     await assert.rejects(install(profile, artifact), /symlink/);
+    await rm(join(profile, 'BepInEx', 'plugins'), { recursive: true });
+    const outside = join(root, 'outside');
+    await mkdir(outside);
+    await symlink(outside, join(profile, 'BepInEx', 'plugins'), process.platform === 'win32' ? 'junction' : 'dir');
+    await assert.rejects(install(profile, artifact), /symlink/);
+    await assert.rejects(readFile(join(outside, 'swear01-ValheimCliBridge', 'ValheimCliBridge.dll')), { code: 'ENOENT' });
     await writeFile(join(artifact, 'ValheimCliBridge.dll'), 'tampered');
     await assert.rejects(install(profile, artifact), /checksum/);
   } finally { await rm(root, { recursive: true, force: true }); }

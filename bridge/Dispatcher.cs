@@ -26,8 +26,8 @@ namespace ValheimCliBridge
             var job = new Job { Request = request, Expires = Stopwatch.GetTimestamp() + timeoutMs * Stopwatch.Frequency / 1000 };
             lock (gate)
             {
-                if (stopped) return Response.Error(request.id, "Bridge stopped");
-                if (queue.Count >= 8) return Response.Error(request.id, "Bridge busy");
+                if (stopped) return Response.Error(request.id, "Bridge stopped", "cancelled");
+                if (queue.Count >= 8) return Response.Error(request.id, "Bridge busy", "cancelled");
                 queue.Enqueue(job);
             }
             lock (job.Gate)
@@ -41,7 +41,7 @@ namespace ValheimCliBridge
                 if (job.Result != null) return job.Result;
                 if (job.Started) return Response.Error(request.id, "Execution started; outcome unknown. Do not retry automatically.");
                 job.Cancelled = true;
-                return Response.Error(request.id, "Expired before execution; action cancelled");
+                return Response.Error(request.id, "Expired before execution; action cancelled", "cancelled");
             }
         }
         public void Pump()
@@ -56,7 +56,7 @@ namespace ValheimCliBridge
             {
                 if (job.Cancelled || Stopwatch.GetTimestamp() >= job.Expires)
                 {
-                    job.Result = Response.Error(job.Request.id, "Expired before execution; action cancelled");
+                    job.Result = Response.Error(job.Request.id, "Expired before execution; action cancelled", "cancelled");
                     Monitor.PulseAll(job.Gate);
                     return;
                 }
@@ -78,7 +78,7 @@ namespace ValheimCliBridge
                     lock (job.Gate)
                     {
                         job.Cancelled = true;
-                        job.Result = Response.Error(job.Request.id, "Bridge stopped");
+                        job.Result = Response.Error(job.Request.id, "Bridge stopped", "cancelled");
                         Monitor.PulseAll(job.Gate);
                     }
                 }

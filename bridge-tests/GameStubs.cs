@@ -29,11 +29,12 @@ public sealed class ZNet
 public sealed class Player
 {
     public static Player m_localPlayer;
+    public static bool NullList;
     public UnityEngine.Transform transform = new();
     public bool Dead, Teleporting, AcceptTeleport = true;
     public string GetPlayerName() => "fixture-player";
     public bool IsDead() => Dead;
     public bool IsTeleporting() => Teleporting;
     public bool TeleportTo(UnityEngine.Vector3 target, UnityEngine.Quaternion rotation, bool distant) { if (AcceptTeleport) Teleporting = true; return AcceptTeleport; }
-    public static List<Player> GetAllPlayers() => m_localPlayer == null ? new() : new() { null, m_localPlayer };
+    public static List<Player> GetAllPlayers() => NullList ? null : m_localPlayer == null ? new() : new() { null, m_localPlayer };
 }

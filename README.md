@@ -82,8 +82,11 @@ Use `--request-id <UUID>` on writes when preserving an operation ID across a ret
 Never retry a write automatically after a connection failure or timeout. Work still
 queued at its deadline is cancelled and cannot run later. Work that already started
 can report an unknown outcome; inspect game state before issuing another operation.
-The bridge refuses reuse of a write ID during its lifetime and caps writes at 256
-per restart. This is not a persistent exactly-once guarantee: restarting clears the
+The bridge retains IDs for writes that started or may have started, and caps these
+at 256 per restart. A confirmed `state: "cancelled"` response does not consume the ID.
+The limit returns an explicit error and requires a restart; IDs are never expired
+automatically because that would allow an old write to be replayed.
+This is not a persistent exactly-once guarantee: restarting clears the
 ID history, and using a different UUID represents a new operation.
 
 ## Architecture and limits

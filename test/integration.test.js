@@ -32,6 +32,12 @@ test('Node CLI client talks to production C# transport and dispatcher', async ()
     const write = { port, token: 'a'.repeat(64), operation: 'teleport', x: 1, y: 2, z: 3, id };
     assert.equal((await request(write)).state, 'started');
     await assert.rejects(request(write), /Write ID already used/);
+    const cancelled = { ...write, id: randomUUID(), x: 0 };
+    await assert.rejects(request(cancelled), /Fixture cancelled/);
+    assert.equal((await request({ ...cancelled, x: 1 })).state, 'started');
+    const uncertain = { ...write, id: randomUUID(), x: -1 };
+    await assert.rejects(request(uncertain), /Game operation failed/);
+    await assert.rejects(request({ ...uncertain, x: 1 }), /Write ID already used/);
   } finally {
     if (child.exitCode === null && child.signalCode === null) {
       const exited = once(child, 'exit');

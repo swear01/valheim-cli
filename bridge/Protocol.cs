@@ -62,7 +62,7 @@ namespace ValheimCliBridge
         [DataMember(EmitDefaultValue = false)] public string[] players;
         [DataMember(EmitDefaultValue = false)] public Position position;
         [DataMember(EmitDefaultValue = false)] public Position destination;
-        public static Response Error(string id, string message) => new Response { id = id, ok = false, error = message };
+        public static Response Error(string id, string message, string state = null) => new Response { id = id, ok = false, error = message, state = state };
     }
 
     public static class Protocol

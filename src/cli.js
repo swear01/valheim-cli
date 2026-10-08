@@ -1,6 +1,6 @@
 import { readFile, realpath, stat, mkdir, copyFile, lstat } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { resolve, join, dirname } from 'node:path';
+import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { request } from './client.js';
@@ -14,7 +14,7 @@ All results are JSON. No arbitrary console commands. No automatic retries.`;
 
 async function safeDirectory(path) {
   await mkdir(path, { recursive: true });
-  if ((await lstat(path)).isSymbolicLink() || await realpath(path) !== resolve(path)) {
+  if ((await lstat(path)).isSymbolicLink()) {
     throw new Error('Profile/plugin path must not contain symlinks');
   }
 }
