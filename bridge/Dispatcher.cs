@@ -12,7 +12,6 @@ namespace ValheimCliBridge
             public Request Request;
             public long Expires;
             public readonly object Gate = new object();
-            public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
             public bool Started;
             public bool Cancelled;
             public Response Result;
@@ -31,9 +30,14 @@ namespace ValheimCliBridge
                 if (queue.Count >= 8) return Response.Error(request.id, "Bridge busy");
                 queue.Enqueue(job);
             }
-            if (job.Done.Wait(timeoutMs)) return job.Result;
             lock (job.Gate)
             {
+                while (job.Result == null)
+                {
+                    var remaining = (job.Expires - Stopwatch.GetTimestamp()) * 1000 / Stopwatch.Frequency;
+                    if (remaining <= 0) break;
+                    Monitor.Wait(job.Gate, (int)Math.Min(remaining, int.MaxValue));
+                }
                 if (job.Result != null) return job.Result;
                 if (job.Started) return Response.Error(request.id, "Execution started; outcome unknown. Do not retry automatically.");
                 job.Cancelled = true;
@@ -53,7 +57,7 @@ namespace ValheimCliBridge
                 if (job.Cancelled || Stopwatch.GetTimestamp() >= job.Expires)
                 {
                     job.Result = Response.Error(job.Request.id, "Expired before execution; action cancelled");
-                    job.Done.Set();
+                    Monitor.PulseAll(job.Gate);
                     return;
                 }
                 job.Started = true;
@@ -61,7 +65,7 @@ namespace ValheimCliBridge
             Response result;
             try { result = execute(job.Request); }
             catch (Exception error) { result = Response.Error(job.Request.id, "Game operation failed: " + error.GetType().Name); }
-            lock (job.Gate) { job.Result = result; job.Done.Set(); }
+            lock (job.Gate) { job.Result = result; Monitor.PulseAll(job.Gate); }
         }
         public void Stop()
         {
@@ -75,7 +79,7 @@ namespace ValheimCliBridge
                     {
                         job.Cancelled = true;
                         job.Result = Response.Error(job.Request.id, "Bridge stopped");
-                        job.Done.Set();
+                        Monitor.PulseAll(job.Gate);
                     }
                 }
             }

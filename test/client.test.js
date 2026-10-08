@@ -32,3 +32,12 @@ test('Client validates identity, errors, framing and accepts fragmented response
     } finally { await new Promise(resolve => server.close(resolve)); }
   }
 });
+
+test('Connection loss after submitting a write reports unknown outcome', async () => {
+  const server = createServer(socket => socket.once('data', () => socket.resetAndDestroy()));
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    await assert.rejects(request({ port: server.address().port, token: 'a'.repeat(64), operation: 'teleport', x: 1, y: 2, z: 3 }), /outcome.*unknown.*retry/i);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});

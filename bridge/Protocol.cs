@@ -82,7 +82,7 @@ namespace ValheimCliBridge
             using (var reader = JsonReaderWriterFactory.CreateJsonReader(bytes, new XmlDictionaryReaderQuotas { MaxDepth = 4, MaxStringContentLength = 512 }))
             {
                 reader.MoveToContent();
-                if (reader.Name != "root" || reader.GetAttribute("type") != "object") throw new InvalidDataException("Expected request object");
+                if (reader.Name != "root" || reader.GetAttribute("type") != "object" || reader.GetAttribute("__type") != null) throw new InvalidDataException("Expected plain request object");
                 while (reader.Read())
                 {
                     if (reader.NodeType != XmlNodeType.Element) continue;

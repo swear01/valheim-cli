@@ -25,6 +25,8 @@ static class Program
         var json = Encoding.UTF8.GetString(Protocol.Encode(valid));
         Invalid(json + "garbage");
         Invalid(json.Substring(0, json.Length - 1) + ",\"extra\":true}");
+        Invalid(json.Substring(0, json.Length - 1) + ",\"__type\":\"Request:#ValheimCliBridge\"}");
+        Invalid("{\"__type\":\"Request:#ValheimCliBridge\"," + json.Substring(1));
         Invalid(json.Replace("status", "pos ; spawn Troll"));
         Invalid(json.Replace("status", "teleport"));
         Invalid(json.Substring(0, json.Length - 1) + ",\"x\":\"1\"}");

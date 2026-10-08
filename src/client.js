@@ -12,18 +12,21 @@ export function request({ port, token, operation, x, y, z, id = randomUUID() }) 
   header.writeUInt32BE(body.length);
   return new Promise((resolve, reject) => {
     const socket = connect({ host: '127.0.0.1', port });
-    const timer = setTimeout(() => fail(new Error('Bridge timeout; outcome may be unknown. Do not automatically retry a write.')), 5000);
+    const timer = setTimeout(() => fail(new Error('Bridge timeout')), 5000);
     let buffer = Buffer.alloc(0);
     let expected;
     let settled = false;
+    let submitted = false;
+    let acknowledged = false;
     function fail(error) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       socket.destroy();
+      if (submitted && operation === 'teleport' && !acknowledged) error.message += ' Write outcome unknown; do not automatically retry.';
       reject(error);
     }
-    socket.once('connect', () => socket.write(Buffer.concat([header, body])));
+    socket.once('connect', () => { submitted = true; socket.write(Buffer.concat([header, body])); });
     socket.on('data', chunk => {
       if (settled) return;
       if (buffer.length + chunk.length > maxFrame + 4) return fail(new Error('Bridge response too large'));
@@ -37,6 +40,7 @@ export function request({ port, token, operation, x, y, z, id = randomUUID() }) 
           if (buffer.length !== expected + 4) throw new Error('Trailing bridge data');
           const response = JSON.parse(buffer.subarray(4).toString('utf8'));
           if (response.id !== id || typeof response.ok !== 'boolean') throw new Error('Invalid bridge response');
+          acknowledged = true;
           if (!response.ok) throw new Error(response.error || 'Bridge rejected operation');
           settled = true;
           clearTimeout(timer);
@@ -45,7 +49,7 @@ export function request({ port, token, operation, x, y, z, id = randomUUID() }) 
         } catch (error) { fail(error); }
       }
     });
-    socket.on('error', () => fail(new Error('Cannot connect to bridge. Start Valheim with the plugin enabled.')));
+    socket.on('error', () => fail(new Error(submitted ? 'Bridge connection failed.' : 'Cannot connect to bridge. Start Valheim with the plugin enabled.')));
     socket.on('end', () => fail(new Error('Bridge closed before a complete response')));
   });
 }
