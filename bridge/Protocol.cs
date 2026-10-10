@@ -20,12 +20,22 @@ namespace ValheimCliBridge
         [DataMember(EmitDefaultValue = false)] public double? x;
         [DataMember(EmitDefaultValue = false)] public double? y;
         [DataMember(EmitDefaultValue = false)] public double? z;
+        [DataMember(EmitDefaultValue = false)] public string keys;
+        [DataMember(EmitDefaultValue = false)] public string buttons;
+        [DataMember(EmitDefaultValue = false)] public int? durationMs;
+        [DataMember(EmitDefaultValue = false)] public int? mouseX;
+        [DataMember(EmitDefaultValue = false)] public int? mouseY;
+        [DataMember(EmitDefaultValue = false)] public int? scroll;
+        [DataMember(EmitDefaultValue = false)] public double? pointerX;
+        [DataMember(EmitDefaultValue = false)] public double? pointerY;
+        internal long? controlEpoch;
+        public bool IsWrite => operation == "teleport" || operation == "input" || operation == "mouse";
 
         public void Validate()
         {
             if (!Guid.TryParseExact(id, "D", out _) || token == null || token.Length != 64)
                 throw new InvalidDataException("Invalid request schema");
-            if (operation != "status" && operation != "players" && operation != "teleport")
+            if (operation != "status" && operation != "players" && operation != "teleport" && operation != "observe" && operation != "input" && operation != "mouse" && operation != "stop")
                 throw new InvalidDataException("Unknown operation");
             if (operation == "teleport")
             {
@@ -33,8 +43,22 @@ namespace ValheimCliBridge
                     throw new InvalidDataException("Invalid coordinates");
             }
             else if (x.HasValue || y.HasValue || z.HasValue) throw new InvalidDataException("Unexpected coordinates");
+            if (operation == "input" || operation == "mouse") InputSpec.Validate(this);
+            else if (keys != null || buttons != null || durationMs.HasValue || mouseX.HasValue || mouseY.HasValue || scroll.HasValue || pointerX.HasValue || pointerY.HasValue)
+                throw new InvalidDataException("Unexpected input fields");
         }
         private static bool Finite(double? value) => value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value);
+    }
+
+    [DataContract]
+    public sealed class InventoryItem
+    {
+        [DataMember] public string name;
+        [DataMember] public int count;
+        [DataMember] public int quality;
+        [DataMember] public int column;
+        [DataMember] public int row;
+        [DataMember] public bool equipped;
     }
 
     [DataContract]
@@ -57,6 +81,23 @@ namespace ValheimCliBridge
         [DataMember] public bool host;
         [DataMember] public bool teleportAllowed;
         [DataMember] public bool teleporting;
+        [DataMember] public bool controlAllowed;
+        [DataMember] public bool inputActive;
+        [DataMember(EmitDefaultValue = false)] public string inputState;
+        [DataMember(EmitDefaultValue = false)] public string inputId;
+        [DataMember] public bool foreground;
+        [DataMember] public bool dead;
+        [DataMember] public float health;
+        [DataMember] public float maxHealth;
+        [DataMember] public float stamina;
+        [DataMember] public float maxStamina;
+        [DataMember(EmitDefaultValue = false)] public Position view;
+        [DataMember(EmitDefaultValue = false)] public InventoryItem[] inventory;
+        [DataMember(EmitDefaultValue = false)] public string image;
+        [DataMember] public int imageWidth;
+        [DataMember] public int imageHeight;
+        [DataMember(EmitDefaultValue = false)] public string capturedAt;
+        [DataMember(EmitDefaultValue = false)] public string captureError;
         [DataMember(EmitDefaultValue = false)] public string world;
         [DataMember(EmitDefaultValue = false)] public string player;
         [DataMember(EmitDefaultValue = false)] public string[] players;
@@ -68,6 +109,7 @@ namespace ValheimCliBridge
     public static class Protocol
     {
         public const int MaxFrame = 65536;
+        public const int MaxObservationFrame = 8 * 1024 * 1024;
         public static byte[] Encode<T>(T value)
         {
             using (var stream = new MemoryStream())
@@ -86,12 +128,12 @@ namespace ValheimCliBridge
                 while (reader.Read())
                 {
                     if (reader.NodeType != XmlNodeType.Element) continue;
-                    if (reader.Depth != 1 || !fields.Add(reader.Name) ||
-                        (reader.Name != "id" && reader.Name != "token" && reader.Name != "operation" && reader.Name != "x" && reader.Name != "y" && reader.Name != "z"))
+                    var textField = reader.Name == "id" || reader.Name == "token" || reader.Name == "operation" || reader.Name == "keys" || reader.Name == "buttons";
+                    var numberField = reader.Name == "x" || reader.Name == "y" || reader.Name == "z" || reader.Name == "durationMs" || reader.Name == "mouseX" || reader.Name == "mouseY" || reader.Name == "scroll" || reader.Name == "pointerX" || reader.Name == "pointerY";
+                    if (reader.Depth != 1 || !fields.Add(reader.Name) || (!textField && !numberField))
                         throw new InvalidDataException("Invalid request fields");
                     var kind = reader.GetAttribute("type");
-                    var coordinate = reader.Name == "x" || reader.Name == "y" || reader.Name == "z";
-                    if (kind != (coordinate ? "number" : "string")) throw new InvalidDataException("Invalid request field type");
+                    if (kind != (numberField ? "number" : "string")) throw new InvalidDataException("Invalid request field type");
                 }
             }
             using (var stream = new MemoryStream(bytes))
@@ -123,7 +165,7 @@ namespace ValheimCliBridge
         public static void WriteFrame(Stream stream, Response response)
         {
             var bytes = Encode(response);
-            if (bytes.Length > MaxFrame) throw new InvalidDataException("Response too large");
+            if (bytes.Length > (response.image == null ? MaxFrame : MaxObservationFrame)) throw new InvalidDataException("Response too large");
             stream.Write(new byte[] { (byte)(bytes.Length >> 24), (byte)(bytes.Length >> 16), (byte)(bytes.Length >> 8), (byte)bytes.Length }, 0, 4);
             stream.Write(bytes, 0, bytes.Length);
         }

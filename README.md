@@ -1,119 +1,180 @@
 # Valheim Agent CLI
 
-A small CLI and a separate BepInEx plugin for local, player-owned Valheim automation.
-The CLI prints JSON and exits nonzero on errors. An agent that can run shell commands
-can call it directly. It does not include an LLM or depend on ValheimMCP.
+A local CLI and BepInEx bridge for an agent controlling **your own character**.
+No LLM, autonomous bot or ValheimMCP dependency is bundled. A shell-capable agent
+uses JSON state and game screenshots to choose ordinary keyboard/mouse actions.
 
-**Version 0.1.0 is experimental.** The plugin compiles against Valheim 1.0.16 references.
-Automated checks exercise the production protocol, authentication and dispatcher,
-using a fixture in place of the game. Actual Valheim launch, Unity/Mono behavior,
-teleport arrival and multiplayer behavior still require a test world.
+**0.2.0 is experimental and has not been tested in a running game.** The earlier
+0.1.0 build was smoke-tested in Windows Valheim 1.0.17, but that does not validate
+this release's new input or screenshot implementation. Compilation targets
+Valheim 1.0.16. Automated tests use game and input fixtures, not a real player.
 
 ## Install
 
-Install Node.js 22 or later on the **same computer that runs Valheim**. Then, once
-the package is published to npm:
+Install Node.js 22+ on the same computer as Valheim. Download the CLI tarball from
+[GitHub Releases](https://github.com/swear01/valheim-cli/releases), then install it:
 
 ```sh
-npm install -g valheim-agent-cli
-valheim install --profile "C:\path\to\Gale\Valheim\profiles\your-profile"
+npm install -g ./valheim-agent-cli-0.2.0.tgz
+valheim install --profile "C:\path\to\Gale\profile"
 ```
 
-Exit the game before installing. `install` copies only the bundled, checksum-verified
-`ValheimCliBridge.dll` to `BepInEx/plugins/swear01-ValheimCliBridge/` in an existing
-BepInEx profile. It preserves other plugins and settings. Installing the identical
-DLL again is harmless; replacing a different DLL requires backing up/removing that
-specific plugin first. There are no npm install hooks or downloads during installation.
+An npm registry publication is not implied. Exit Valheim before installing or
+upgrading. The installer checks the bundled DLL hash and preserves other mods and
+settings. It refuses to overwrite a different existing DLL: back up/remove only
+that bridge first. If using the Thunderstore package, let the mod manager install
+the DLL instead; do not install a second copy through the CLI. The internal plugin
+GUID, DLL and configuration filenames remain `ValheimCliBridge`.
 
-Alternatively, copy the DLL from `bridge-dist/` manually into that plugin folder.
-Gale/r2z exports containing a local DLL require **Import all files**. npm installs the
-computer CLI; Gale loads the game DLL. An npm package cannot itself be loaded as a
-Valheim mod.
+On first modded launch the bridge generates these local files:
 
-Start the modded game. The plugin creates:
+- `BepInEx/config/swear01.ValheimCliBridge.cfg`
+- `BepInEx/config/swear01.ValheimCliBridge.token`
 
-* `BepInEx/config/swear01.ValheimCliBridge.cfg`
-* `BepInEx/config/swear01.ValheimCliBridge.token` — a random local credential
+Keep the random token private and out of modpacks. It inherits the profile's OS
+permissions. There are no npm install hooks or runtime downloads. Only the
+computer running the controlled character needs this bridge; the teammate and
+server do not need it for ordinary input. This is not a dedicated-server bot.
 
-Do not commit, share, or put the token in a modpack. Each player generates their own.
-The token inherits the profile folder permissions; other programs running as the
-same OS user may read it. Restrict access to the profile folder if sharing a computer.
+## Enable character control
 
-## Use
+In F10 / Mods settings → Valheim CLI Bridge, enable **AllowControl**. Alternatively,
+exit the game, edit the config and relaunch:
+
+```ini
+[Permissions]
+AllowControl = true
+AllowTeleport = false
+```
+
+Normal input supports either the host's or a joining player's own character.
+It does not grant OP or bypass stamina, materials, combat, physics or game rules.
+Input requires Windows, a living character in a world, and the game's foreground
+window. System menu, chat and console block new input. Inventory and build menus
+remain available. Permission changes through the configuration manager apply
+on the next game update; Enabled / Port changes need a restart.
+
+**Press F12 to release input and revoke AllowControl.** Re-enable it manually to
+resume. `valheim stop` also releases input, without revoking the permission. It is
+authenticated but needs neither permission nor a host role, and runs independently
+of Unity's main-thread dispatcher. Do not play the same character concurrently.
+
+## Observe, act, verify
+
+Use the same `--profile` folder on every command; optional `--port` defaults to 28761.
 
 ```sh
 valheim status --profile "C:\path\to\profile"
 valheim players --profile "C:\path\to\profile"
+valheim observe --profile "C:\path\to\profile" --image frame-001.png
+valheim input --profile "C:\path\to\profile" --keys W,Shift --ms 500 --confirm
+valheim status --profile "C:\path\to\profile"
+valheim stop --profile "C:\path\to\profile"
+```
+
+`status` includes position, camera Euler angles in degrees, health, stamina,
+death/teleport state, foreground status, permission and input activity. `players`
+returns currently loaded player objects, not the complete remote server roster.
+
+`observe` adds inventory item name tokens, stacks, quality, equipped state and
+zero-based grid positions, plus a game-only screenshot taken after rendering.
+Images retain aspect ratio within 1280×720. `capturedAt` is the image's UTC capture
+time; state is queried separately. Images can be reused for at most 500 ms and are
+invalidated when input or teleport starts. The CLI polls pending screenshot reads,
+never write requests. `--image` writes a new PNG file and refuses to overwrite an
+existing file. JSON contains the path and dimensions, never base64. Without
+`--image`, only observation metadata is printed. Paused/background rendering may
+time out; the CLI reports this explicitly.
+
+`mouse` accepts only mouse motion/scroll. It can adjust aim, turn while walking or
+drag a held button without extending the existing hold. A mouse-only operation
+returns `state: "applied"`; verify its effect with an observation.
+
+`input` returns `state: "started"` with an `inputId`; it does not wait for movement
+or prove success. Poll `status` until `inputActive=false` and inspect `inputState`.
+Another input is refused while one is active. Verify the position or a fresh
+screenshot before deciding the next action. An interrupted input may have already
+moved, attacked or consumed something; do not replay it automatically.
+
+## Input reference
+
+Actions use the player's existing bindings. These examples assume default controls;
+relative mouse units are OS mouse motion, not degrees. Sensitivity and acceleration
+change the result, so use short moves and observe the camera afterward.
+
+| Purpose | Options after `valheim input --profile <folder> --confirm` |
+| --- | --- |
+| Walk / sprint | `--keys W --ms 500` / `--keys W,Shift --ms 500` |
+| Jump / roll | `--keys Space --ms 100` / `--keys Space --buttons right --ms 100` |
+| Look / aim | `--mouse-x 120 --mouse-y -30` |
+| Attack / block | `--buttons left --ms 100` / `--buttons right --ms 500` |
+| Charged bow | `--buttons left --ms 2500` (release fires when equipped and ready) |
+| Interact / equip slot | `--keys E --ms 100` / `--keys 1 --ms 100` |
+| Inventory / build menu | `--keys Tab --ms 100` / `--buttons right --ms 100` with hammer |
+| UI click / drag | `--pointer-x 0.3 --pointer-y 0.4 --buttons left --ms 100` |
+| Look / move pointer while held | `valheim mouse --profile <folder> --mouse-x 60 --confirm` or `--pointer-x 0.5 --pointer-y 0.6` |
+| Scroll / rotate building | `--scroll 1` |
+
+Pointer coordinates are relative to the game client area: `(0,0)` top left,
+`(1,1)` bottom right. Use absolute pointer coordinates in a visible UI, and relative
+motion for the camera. They cannot be combined in one request. Holds last
+50–5000 ms (default 200); motion is limited to ±2000 per axis, wheel to ±10 notches.
+Keys: A–Z, 0–9, Space, Shift, Control, Tab, Escape, Enter, Backspace and arrow names
+Left/Up/Right/Down. Keys are comma-separated, case-insensitive, at most eight;
+buttons are lowercase left/right/middle. No Alt, Windows or function keys are
+accepted. Control may be combined only with Space to avoid system shortcuts.
+Keys and buttons are released automatically at the deadline, on focus loss,
+permission revocation, F12, plugin unload or `stop`.
+
+The agent can use the normal inventory, workbench and build UIs for equipment,
+eating, crafting and construction. There are no semantic `craft`, `build`, combat
+AI or navigation commands; providing input does not prove an agent can reliably
+complete a boss fight or an entire playthrough. See [the agent play guide](docs/agent-play.md)
+for an operating loop and the required live acceptance tests.
+
+## Teleport
+
+```sh
 valheim teleport 120 45 -230 --profile "C:\path\to\profile" --confirm
 ```
 
-`status` reports whether a local player is in a world, their position, host status,
-and whether teleporting is active/allowed. `players` reports **currently loaded
-player objects**; it is not a complete server roster for players outside the loaded area.
-Read operations work on the local host or a joining client with this plugin installed.
+This separate permission remains host-only and off by default (`AllowTeleport`).
+Joining admins cannot teleport through the bridge. Coordinates are X, Y (height),
+Z: X/Z within ±10500, Y within -1000…5000. Bounds do not ensure safe ground.
+`state: "started"` is not arrival: check `teleporting` and actual position afterward.
+Use only a known safe destination in a test/backup world.
 
-Teleport is disabled by default. To enable it, the host must set:
+## Transport and failure limits
 
-```ini
-[Permissions]
-AllowTeleport = true
-```
+The CLI connects only to `127.0.0.1:28761`. Every operation requires the local
+256-bit token and a UUID. No shell/console execution API, world-file editing,
+outbound AI connection or network service is added. Never forward the port.
 
-Restart the game after editing configuration. Only the **local host's own living
-character** can teleport. Joining clients, including remote admins, cannot issue
-writes through this release. This is not an OP-granting tool and does not change
-`adminlist.txt`. The teammate does not need this plugin for the host's local CLI.
+Frames use a 4-byte big-endian length plus JSON. Requests and ordinary replies are
+capped at 64 KiB; image replies at 8 MiB. Connections last at most four seconds,
+with a bounded queue and two-second main-thread queue deadline. Input release is
+also checked every 20 ms by an independent timer so a Unity stall or disconnected
+CLI does not extend a hold past its deadline under normal process operation.
 
-Coordinates use **X, Y (height), Z**, not console `goto` argument order. X/Z are
-limited to ±10500; Y to -1000…5000. Bounds do not prove safe terrain: a bad height can
-place you underground or in the air. Test with known positions in a backup/test world.
-Valheim and other teleport mods still control loading and arrival safety.
+Use `--request-id <UUID>` for input/mouse/teleport when tracking an operation. IDs of
+started or uncertain writes are retained until restart (65,536 maximum); confirmed
+cancelled requests do not consume an ID. A duplicate write is rejected. `stop`
+bypasses both the write-history cap and Unity queue. Accepted but queued controls
+are invalidated by stop, revocation or loss of control. A restart clears replay
+history; a new UUID is a new action. Never automatically retry a timed-out write:
+use `stop`, inspect status and observe the result first.
 
-A successful teleport response has `state: "started"`, the observed starting
-`position` and requested `destination`. It does **not** mean the character has arrived.
-Call `status` afterward to inspect `teleporting` and actual `position`.
+Windows SendInput targets the foreground application. Each native event checks
+that Valheim owns that window, but focus can change between a check and injection.
+Keep Valheim foreground and do not use the desktop during agent control. Physical
+held modifiers block new actions. A hard process kill/OS crash prevents the
+in-process release watchdog from running; physically tap/release any affected keys.
+Failed releases remain visible and are retried by the watchdog.
 
-## Agent usage and timeout behavior
+## Build and verification
 
-An agent can call these same commands and parse stdout as JSON. Credentials are read
-from the chosen profile, never passed in command-line arguments or printed in errors.
-Use `--request-id <UUID>` on writes when preserving an operation ID across a retry.
-
-Never retry a write automatically after a connection failure or timeout. Work still
-queued at its deadline is cancelled and cannot run later. Work that already started
-can report an unknown outcome; inspect game state before issuing another operation.
-The bridge retains IDs for writes that started or may have started, and caps these
-at 256 per restart. A confirmed `state: "cancelled"` response does not consume the ID.
-The limit returns an explicit error and requires a restart; IDs are never expired
-automatically because that would allow an old write to be replayed.
-This is not a persistent exactly-once guarantee: restarting clears the
-ID history, and using a different UUID represents a new operation.
-
-## Architecture and limits
-
-`bin/valheim.js` → validated CLI arguments → `src/client.js` → loopback TCP →
-`bridge/Server.cs` → bounded dispatcher → `Plugin.Execute` on Unity's main thread.
-
-* TCP binds only to `127.0.0.1:28761`; there is no public HTTP/MCP endpoint.
-* Each connection carries one big-endian 4-byte length plus one JSON request/response.
-* Every request requires the 256-bit random token and a UUID. Unknown/duplicate JSON
-  fields, nested input, invalid numbers and unsupported operations are rejected.
-* Frames are capped at 64 KiB; connection lifetime at 4 seconds; queue at 8;
-  main-thread execution at one job per frame, with a 2-second queue deadline.
-* There is no arbitrary console execution, command alias expansion, shell execution,
-  world-file editing, outbound networking or background AI process.
-
-Configure `[Bridge] Enabled` or `Port` in the plugin config and restart; use the same
-port via CLI `--port`. To disable, exit Valheim and remove only this plugin folder.
-For a lost/exposed token, stop the game, delete the token file, and restart to rotate it.
-Do not expose or forward the bridge port to a LAN or the internet. Running this CLI
-on a different computer is outside this release's scope.
-
-## Build and verify
-
-Requires Node.js 22+ and .NET SDK 9. Compilation uses pinned, compile-only NuGet
-references from nuget.org and the official BepInEx feed; reference assemblies are
-never shipped with the npm package.
+Requires Node.js 22+ and .NET SDK 9. Compile-only, pinned NuGet references are never
+included in the distributable. No new runtime dependency is required for control.
 
 ```sh
 npm run test:bridge
@@ -123,16 +184,15 @@ npm run pack:bridge
 npm pack
 ```
 
-`npm test` includes a real Node → C# TCP integration check; run `test:bridge` first
-to build its C# fixture. The npm tarball contains the CLI, bridge DLL and checksum
-manifest, README and license. `prepack` refuses missing/mismatched bridge artifacts.
+CI runs on Windows and Linux. Tests exercise the production protocol, dispatcher,
+replay guard and Node-to-C# TCP connection; an injected input backend verifies
+leases, stop, focus, F12, revocation, failure rollback and release retry. Screenshot
+fixtures exercise scheduling and cleanup, not actual GPU capture. The Windows
+SendInput structure layout is checked but **no automated test injects real OS
+input or launches Valheim**. New controls, UI actions, screenshots, multiplayer
+behavior and long sessions still require the dedicated test-world checklist.
 
-CI repeats compilation, security/timeout/transport checks and packaging on Windows
-and Linux. No automated check claims to launch Valheim. Before using a real world,
-verify: load the plugin, query status/loaded players, verify a joining client cannot
-teleport, enable host teleport in a test world, check arrival, disable it again, and
-confirm your other mods and world saving still work.
-
-Sources: [BepInEx plugin guide](https://docs.bepinex.dev/articles/dev_guide/plugin_tutorial/2_plugin_start.html),
-[Node TCP API](https://nodejs.org/api/net.html),
+Sources: [Windows SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput),
+[Unity screenshot timing](https://docs.unity3d.com/2021.3/Documentation/ScriptReference/ScreenCapture.CaptureScreenshotAsTexture.html),
+[BepInEx plugin guide](https://docs.bepinex.dev/articles/dev_guide/plugin_tutorial/2_plugin_start.html),
 [Valheim compile references](https://github.com/Digitalroot-Valheim/Digitalroot.Valheim.References).

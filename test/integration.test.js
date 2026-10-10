@@ -23,7 +23,7 @@ test('Node CLI client talks to production C# transport and dispatcher', async ()
     const port = await Promise.race([ready, new Promise((_, reject) => setTimeout(() => reject(new Error('Bridge startup timeout')), 10000).unref())]);
     const status = await request({ port, token: 'a'.repeat(64), operation: 'status' });
     assert.equal(status.state, 'observed');
-    assert.equal(status.version, '0.1.0');
+    assert.equal(status.version, '0.2.0');
     const players = await request({ port, token: 'a'.repeat(64), operation: 'players' });
     assert.deepEqual(players.players, ['fixture-player']);
     await assert.rejects(request({ port, token: 'b'.repeat(64), operation: 'status' }), /Unauthorized/);
@@ -38,6 +38,10 @@ test('Node CLI client talks to production C# transport and dispatcher', async ()
     const uncertain = { ...write, id: randomUUID(), x: -1 };
     await assert.rejects(request(uncertain), /Game operation failed/);
     await assert.rejects(request({ ...uncertain, x: 1 }), /Write ID already used/);
+    const input = { port, token: 'a'.repeat(64), operation: 'input', keys: 'W', durationMs: 200, id: randomUUID() };
+    assert.equal((await request(input)).state, 'started');
+    await assert.rejects(request(input), /Write ID already used/);
+    assert.equal((await request({ port, token: 'a'.repeat(64), operation: 'stop' })).ok, true);
   } finally {
     if (child.exitCode === null && child.signalCode === null) {
       const exited = once(child, 'exit');

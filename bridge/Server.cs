@@ -14,18 +14,22 @@ namespace ValheimCliBridge
         private readonly Dispatcher dispatcher;
         private readonly string token;
         private readonly Action<Exception> logError;
+        private readonly Func<string, Response> stopInput;
+        private readonly Func<long> inputEpoch;
         private readonly Thread thread;
         private volatile bool stopped;
         private TcpClient active;
         private readonly object gate = new object();
         private readonly HashSet<string> writes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public int Port => ((IPEndPoint)listener.LocalEndpoint).Port;
-        public Server(int port, string token, Dispatcher dispatcher, Action<Exception> logError)
+        public Server(int port, string token, Dispatcher dispatcher, Action<Exception> logError, Func<string, Response> stopInput = null, Func<long> inputEpoch = null)
         {
             if (token == null || token.Length != 64) throw new ArgumentException("Invalid token");
             this.token = token;
             this.dispatcher = dispatcher;
             this.logError = logError;
+            this.stopInput = stopInput;
+            this.inputEpoch = inputEpoch;
             listener = new TcpListener(IPAddress.Loopback, port);
             listener.Start(8);
             thread = new Thread(Listen) { IsBackground = true, Name = "ValheimCliBridge" };
@@ -50,13 +54,15 @@ namespace ValheimCliBridge
                             {
                                 var request = Protocol.Decode(Protocol.ReadFrame(stream));
                                 if (!Protocol.Authenticated(token, request.token)) response = Response.Error(request.id, "Unauthorized");
-                                else if (request.operation == "teleport" && writes.Contains(request.id)) response = Response.Error(request.id, "Write ID already used; inspect status, do not retry");
-                                else if (request.operation == "teleport" && writes.Count >= 256) response = Response.Error(request.id, "Write limit reached; restart the bridge before a new session");
+                                else if (request.operation == "stop" && stopInput != null) response = stopInput(request.id);
+                                else if (request.IsWrite && writes.Contains(request.id)) response = Response.Error(request.id, "Write ID already used; inspect status, do not retry");
+                                else if (request.IsWrite && writes.Count >= 65536) response = Response.Error(request.id, "Write limit reached; restart the bridge before a new session");
                                 else
                                 {
-                                    if (request.operation == "teleport") writes.Add(request.id);
+                                    if ((request.operation == "input" || request.operation == "mouse") && inputEpoch != null) request.controlEpoch = inputEpoch();
+                                    if (request.IsWrite) writes.Add(request.id);
                                     response = dispatcher.Run(request);
-                                    if (request.operation == "teleport" && response.state == "cancelled") writes.Remove(request.id);
+                                    if (request.IsWrite && response.state == "cancelled") writes.Remove(request.id);
                                 }
                             }
                             catch { response = Response.Error(null, "Invalid request"); }

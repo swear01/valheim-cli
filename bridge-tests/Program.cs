@@ -29,7 +29,7 @@ static class Program
             {
                 if (request.operation == "teleport" && request.x == 0) return Response.Error(request.id, "Fixture cancelled", "cancelled");
                 if (request.operation == "teleport" && request.x == -1) throw new InvalidOperationException();
-                return new Response { id = request.id, ok = true, state = request.operation == "teleport" ? "started" : "observed", version = "0.1.0", players = new[] { "fixture-player" } };
+                return new Response { id = request.id, ok = true, state = request.IsWrite ? "started" : "observed", version = "0.2.0", players = new[] { "fixture-player" } };
             });
             using var server = new Server(0, new string('a', 64), dispatcher, error => System.Console.Error.WriteLine(error.GetType().Name));
             System.Console.WriteLine(server.Port);
@@ -109,6 +109,7 @@ static class Program
         var started = Execute(teleport);
         Assert(started.ok && started.state == "started" && started.destination.x == 1 && started.position.x == 0, "Teleport arrival misreported");
         Assert(!Execute(teleport).ok, "Concurrent teleport accepted");
+        InputTests.Run();
         System.Console.WriteLine("PASS: schema, auth, framing, cancelled timeout, normal dispatch, stop, execution failure, unknown-outcome timeout, host/permission/game-refusal/arrival policies with game fixture");
     }
 }
