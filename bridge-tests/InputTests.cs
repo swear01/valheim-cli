@@ -105,6 +105,10 @@ static class InputTests
         var idleEpoch=controller.Epoch;Hook(Player.m_localPlayer);Hook(Player.m_localPlayer);
         Assert(controller.Epoch==idleEpoch,"Idle physics ticks invalidated queued UI actions");
         Execute(new Request{operation="action",action="inventory"});Assert(!InventoryGui.Visible,"Inventory did not close");
+        Player.m_localPlayer.Inventory.Items.Clear();
+        try { GameActions.Execute(Player.m_localPlayer,new Request{action="slot",slot=1});throw new Exception("Empty hotbar accepted"); }
+        catch(ActionRefusedException e){Assert(e.Message=="Hotbar slot is empty","Expected refusal lost its cause");}
+        Player.m_localPlayer.Inventory.Items.Add(new ItemDrop.ItemData());
         Player.m_localPlayer.PlaceMode=true;
         Execute(new Request{operation="action",action="place"});Assert(Player.m_localPlayer.PlacementCalls==1 && Player.m_localPlayer.Placements==0,"Placement bypassed the original game's validation");
         Player.m_localPlayer.CanPlace=true;Execute(new Request{operation="action",action="place"});Assert(Player.m_localPlayer.Placements==1,"Guarded placement path not reached");

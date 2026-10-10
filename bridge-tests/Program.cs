@@ -29,6 +29,8 @@ static class Program
             {
                 if (request.operation == "teleport" && request.x == 0) return Response.Error(request.id, "Fixture cancelled", "cancelled");
                 if (request.operation == "teleport" && request.x == -1) throw new InvalidOperationException();
+                if (request.operation == "action" && request.action == "slot" && request.slot == 8) throw new ActionRefusedException("Hotbar slot is empty");
+                if (request.operation == "action" && request.action == "slot" && request.slot == 7) throw new InvalidOperationException();
                 return new Response { id = request.id, ok = true, state = request.IsWrite ? "started" : "observed", version = "0.2.0", players = new[] { "fixture-player" } };
             });
             using var server = new Server(0, new string('a', 64), dispatcher, error => System.Console.Error.WriteLine(error.GetType().Name));

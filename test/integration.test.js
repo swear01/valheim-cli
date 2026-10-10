@@ -41,6 +41,12 @@ test('Node CLI client talks to production C# transport and dispatcher', async ()
     const input = { port, token: 'a'.repeat(64), operation: 'input', moveZ: 1, durationMs: 200, id: randomUUID() };
     assert.equal((await request(input)).state, 'started');
     await assert.rejects(request(input), /Write ID already used/);
+    const refusedSlot = { port, token: 'a'.repeat(64), operation: 'action', action: 'slot', slot: 8, id: randomUUID() };
+    await assert.rejects(request(refusedSlot), /Hotbar slot is empty/);
+    assert.equal((await request({ ...refusedSlot, slot: 1 })).state, 'started');
+    const uncertainSlot = { ...refusedSlot, slot: 7, id: randomUUID() };
+    await assert.rejects(request(uncertainSlot), /Game operation failed/);
+    await assert.rejects(request({ ...uncertainSlot, slot: 1 }), /Write ID already used/);
     for (const action of [
       { operation: 'look', yaw: 30, pitch: -10 },
       { operation: 'action', action: 'slot', slot: 1 },

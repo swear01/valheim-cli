@@ -38,27 +38,27 @@ namespace ValheimCliBridge
             {
                 case "interact":
                     var target = local.GetHoverObject();
-                    if (target == null || Interact == null) throw new InvalidOperationException("No interactable object under the game's crosshair");
+                    if (target == null || Interact == null) throw new ActionRefusedException("No interactable object under the game's crosshair");
                     Interact.Invoke(local, new object[] { target, false, false }); break;
                 case "slot":
-                    if (local.GetInventory().GetItemAt(r.slot.Value - 1, 0) == null) throw new InvalidOperationException("Hotbar slot is empty");
+                    if (local.GetInventory().GetItemAt(r.slot.Value - 1, 0) == null) throw new ActionRefusedException("Hotbar slot is empty");
                     local.UseHotbarItem(r.slot.Value); break;
                 case "inventory":
-                    if (InventoryGui.instance == null) throw new InvalidOperationException("Inventory UI unavailable");
+                    if (InventoryGui.instance == null) throw new ActionRefusedException("Inventory UI unavailable");
                     if (InventoryGui.IsVisible()) InventoryGui.instance.Hide(); else InventoryGui.instance.Show(null); break;
                 case "build-menu":
-                    if (!local.InPlaceMode() || Hud.instance == null) throw new InvalidOperationException("Equip a building tool first");
+                    if (!local.InPlaceMode() || Hud.instance == null) throw new ActionRefusedException("Equip a building tool first");
                     Hud.instance.TogglePieceSelection(); break;
                 case "hide": local.HideHandItems(); break;
                 case "guardian": if (!local.StartGuardianPower()) throw new InvalidOperationException("Game refused guardian power"); break;
                 case "place":
-                    if (!local.InPlaceMode() || Placement == null || PlacePressed == null) throw new InvalidOperationException("Building tool or placement API unavailable");
+                    if (!local.InPlaceMode() || Placement == null || PlacePressed == null) throw new ActionRefusedException("Building tool or placement API unavailable");
                     PlacePressed.SetValue(local, Time.time);
                     Placement.Invoke(local, new object[] { true, Time.deltaTime }); break;
                 case "rotate":
-                    if (!local.InPlaceMode() || Rotation == null) throw new InvalidOperationException("Building tool or rotation API unavailable");
+                    if (!local.InPlaceMode() || Rotation == null) throw new ActionRefusedException("Building tool or rotation API unavailable");
                     Rotation.SetValue(local, (int)Rotation.GetValue(local) + r.scroll.Value); break;
-                default: throw new InvalidOperationException("Unknown game action");
+                default: throw new ActionRefusedException("Unknown game action");
             }
         }
     }
