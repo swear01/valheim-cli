@@ -67,12 +67,13 @@ namespace ValheimCliBridge
             local != null && ZNet.instance != null && !local.IsDead() && !local.IsTeleporting() &&
             !local.InCutscene() && local.GetComponent<ZNetView>() != null && local.GetComponent<ZNetView>().IsOwner() &&
             !Console.IsVisible() && (Chat.instance == null || !Chat.instance.HasFocus()) && !Menu.IsVisible() && !TextInput.IsVisible() && !Minimap.InTextInput();
-        private static bool CanMove() => !InventoryGui.IsVisible() && !StoreGui.IsVisible() && !Minimap.IsOpen() &&
-            !Hud.IsPieceSelectionVisible() && !GameCamera.InFreeFly() && !PlayerCustomizaton.IsBarberGuiVisible() && !Hud.InRadial();
+        private static bool CanMove(Player local) => !InventoryGui.IsVisible() && !StoreGui.IsVisible() && !Minimap.IsOpen() &&
+            !Hud.IsPieceSelectionVisible() && !GameCamera.InFreeFly() && !PlayerCustomizaton.IsBarberGuiVisible() && !Hud.InRadial() && GameInput.CanTakeInput(local);
         internal ControlFrame ControlFrame(Player local)
         {
             if (input == null || controlledPlayer != local) return null;
-            if (input.Active && (!CanControl(local) || !CanMove())) input.Stop("game_input_blocked");
+            if (input.Active && (!CanControl(local) || !CanMove(local))) input.Stop("game_input_blocked");
+            if (local.GetStamina() <= 0) input.ExhaustRun();
             var frame = input.Sample();
             if (frame != null) { appliedControl = true; return frame; }
             if (appliedControl) { appliedControl = false; return new ControlFrame(); }
@@ -132,8 +133,10 @@ namespace ValheimCliBridge
             if (request.IsControl)
             {
                 if (!CanControl(local) || input == null) return Response.Error(request.id, "Requires local player ownership, game focus, AllowControl=true, and no menu/chat/console/text input", "cancelled");
-                if ((request.operation == "input" || request.operation == "look" || request.operation == "action" && request.action != "inventory" && request.action != "build-menu") && !CanMove())
-                    return Response.Error(request.id, "Close inventory, map, store, build selector or other blocking UI first", "cancelled");
+                if ((request.operation == "input" || request.operation == "look" || request.operation == "action" && request.action != "inventory" && request.action != "build-menu") && !CanMove(local))
+                    return Response.Error(request.id, "Game controller input is blocked; close blocking UI first", "cancelled");
+                if (request.operation == "action" && request.action != "inventory" && !(request.action == "build-menu" && Hud.IsPieceSelectionVisible()) && !GameActions.CanTakeInput(local))
+                    return Response.Error(request.id, "Game player input is blocked", "cancelled");
                 if (request.operation == "ui" && !InventoryGui.IsVisible() && !StoreGui.IsVisible() && !Hud.IsPieceSelectionVisible())
                     return Response.Error(request.id, "Open a game UI first", "cancelled");
                 if ((request.operation == "action" || request.operation == "ui") && input.Active)

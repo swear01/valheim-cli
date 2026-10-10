@@ -90,6 +90,7 @@ namespace ValheimCliBridge
             }
         }
         public void Tick() { lock (gate) { if (!disposed) Expire(); } }
+        internal void ExhaustRun() { lock (gate) { if (held != null) held.Run = false; } }
         private void Expire() { if (held != null && Stopwatch.GetTimestamp() >= expires) StopLocked("completed"); }
         public void Stop(string why = "stopped") { lock (gate) { epoch++; StopLocked(why); } }
         private void StopLocked(string why) { held = null; reason = why; }

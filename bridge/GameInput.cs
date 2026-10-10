@@ -9,7 +9,18 @@ namespace ValheimCliBridge
     public static class GameInput
     {
         private static readonly System.Reflection.FieldInfo Blocking = AccessTools.Field(typeof(Player), "m_blocking");
-        internal static void Validate() { if (Blocking == null) throw new InvalidOperationException("Game blocking state unavailable"); }
+        private static readonly System.Reflection.MethodInfo TakeInput = AccessTools.Method(typeof(PlayerController), "TakeInput", new[] { typeof(bool) });
+        internal static void Validate()
+        {
+            if (Blocking == null || TakeInput == null || TakeInput.ReturnType != typeof(bool))
+                throw new InvalidOperationException("Game control policy unavailable");
+            GameActions.Validate();
+        }
+        internal static bool CanTakeInput(Player local)
+        {
+            var controller = local.GetComponent<PlayerController>();
+            return controller != null && TakeInput != null && (bool)TakeInput.Invoke(controller, new object[] { false });
+        }
         public static void Prefix(Player __instance, ref Vector3 movedir, ref bool attack, ref bool attackHold,
             ref bool secondaryAttack, ref bool secondaryAttackHold, ref bool block, ref bool blockHold,
             ref bool jump, ref bool crouch, ref bool run, ref bool autoRun, ref bool dodge)
@@ -18,6 +29,12 @@ namespace ValheimCliBridge
             if (plugin == null || __instance != Player.m_localPlayer) return;
             var frame = plugin.ControlFrame(__instance);
             if (frame == null) return;
+            // Native delay suppresses action buttons after sampling their edges, while movement remains available.
+            if (PlayerController.HasInputDelay)
+            {
+                frame.Attack = frame.AttackHold = frame.Secondary = frame.SecondaryHold = false;
+                frame.Block = frame.BlockHold = frame.Jump = frame.Crouch = frame.Dodge = false;
+            }
             movedir = new Vector3(frame.X, 0, frame.Z);
             attack = frame.Attack; attackHold = frame.AttackHold; secondaryAttack = frame.Secondary; secondaryAttackHold = frame.SecondaryHold;
             __instance.m_autoRun = false;
@@ -28,6 +45,12 @@ namespace ValheimCliBridge
 
     public static class GameActions
     {
+        private static readonly System.Reflection.MethodInfo TakeInput = AccessTools.Method(typeof(Player), "TakeInput", Type.EmptyTypes);
+        internal static void Validate()
+        {
+            if (TakeInput == null || TakeInput.ReturnType != typeof(bool)) throw new InvalidOperationException("Game action policy unavailable");
+        }
+        internal static bool CanTakeInput(Player local) => TakeInput != null && (bool)TakeInput.Invoke(local, null);
         private static readonly System.Reflection.MethodInfo Interact = AccessTools.Method(typeof(Player), "Interact", new[] { typeof(GameObject), typeof(bool), typeof(bool) });
         private static readonly System.Reflection.MethodInfo Placement = AccessTools.Method(typeof(Player), "UpdatePlacement", new[] { typeof(bool), typeof(float) });
         private static readonly System.Reflection.FieldInfo PlacePressed = AccessTools.Field(typeof(Player), "m_placePressedTime");
@@ -48,8 +71,12 @@ namespace ValheimCliBridge
                     if (InventoryGui.IsVisible()) InventoryGui.instance.Hide(); else InventoryGui.instance.Show(null); break;
                 case "build-menu":
                     if (!local.InPlaceMode() || Hud.instance == null) throw new ActionRefusedException("Equip a building tool first");
+                    if (!Hud.IsPieceSelectionVisible() && (PlayerController.HasInputDelay || Hud.InRadial()))
+                        throw new ActionRefusedException("Game currently blocks opening the build menu");
                     Hud.instance.TogglePieceSelection(); break;
-                case "hide": local.HideHandItems(); break;
+                case "hide":
+                    if (local.InAttack() || local.InDodge()) throw new ActionRefusedException("Cannot hide equipment during an attack or dodge");
+                    local.HideHandItems(); break;
                 case "guardian": if (!local.StartGuardianPower()) throw new InvalidOperationException("Game refused guardian power"); break;
                 case "place":
                     if (!local.InPlaceMode() || Placement == null || PlacePressed == null) throw new ActionRefusedException("Building tool or placement API unavailable");

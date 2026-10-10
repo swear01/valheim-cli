@@ -78,9 +78,11 @@ public sealed class Player : UnityEngine.Component
     public static Player m_localPlayer;
     public static bool NullList;
     public UnityEngine.Transform transform = new();
-    public bool Dead, Teleporting, Cutscene, PlaceMode, AcceptTeleport = true, GuardianAllowed = true;
+    public bool Dead, Teleporting, Cutscene, PlaceMode, Attacking, Dodging, AcceptTeleport = true, GuardianAllowed = true, NativeInputAllowed = true;
+    public float Stamina = 50;
     public readonly Inventory Inventory = new();
     public readonly ZNetView View = new();
+    public readonly PlayerController Controller = new();
     public UnityEngine.GameObject Hover = new();
     public UnityEngine.Vector2 Look;
     public int Hotbar, Interactions, PlacementCalls, Placements, m_placeRotation;
@@ -89,7 +91,10 @@ public sealed class Player : UnityEngine.Component
     public bool ToggleBlock, m_autoRun;
     public bool Blocking => m_blocking;
     public bool CanPlace;
-    public Player() { gameObject.Components[typeof(ZNetView)] = View; }
+    public Player() { gameObject.Components[typeof(ZNetView)] = View; gameObject.Components[typeof(PlayerController)] = Controller; }
+    private bool TakeInput() => NativeInputAllowed;
+    public bool InAttack() => Attacking;
+    public bool InDodge() => Dodging;
     public bool InCutscene() => Cutscene;
     public bool InPlaceMode() => PlaceMode;
     public void SetMouseLook(UnityEngine.Vector2 value) { Look = value; }
@@ -105,11 +110,17 @@ public sealed class Player : UnityEngine.Component
     public bool IsTeleporting() => Teleporting;
     public float GetHealth() => 25;
     public float GetMaxHealth() => 25;
-    public float GetStamina() => 50;
+    public float GetStamina() => Stamina;
     public float GetMaxStamina() => 50;
     public Inventory GetInventory() => Inventory;
     public bool TeleportTo(UnityEngine.Vector3 target, UnityEngine.Quaternion rotation, bool distant) { if (AcceptTeleport) Teleporting = true; return AcceptTeleport; }
     public static List<Player> GetAllPlayers() => NullList ? null : m_localPlayer == null ? new() : new() { null, m_localPlayer };
+}
+public sealed class PlayerController
+{
+    public static bool HasInputDelay;
+    public bool InputAllowed = true;
+    private bool TakeInput(bool look = false) => InputAllowed;
 }
 public static class Console { public static bool Visible; public static bool IsVisible() => Visible; }
 public static class Menu { public static bool Visible; public static bool IsVisible() => Visible; }

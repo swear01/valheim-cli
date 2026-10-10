@@ -51,6 +51,17 @@ material/stamina cost path. Observe whether a piece was actually placed.
 All action examples need `--profile <folder> --confirm`. Use `input --actions
 attack|secondary|block|jump|crouch|run|dodge` for combat/movement (comma-separated
 for combinations). Crouch toggles persist; stop cannot undo an action already taken.
+After closing the build selector, allow the game's short input delay to pass before
+sending a one-shot jump/crouch/dodge. Those edges are consumed during the delay;
+held attacks can resume when it ends. Walking/sprinting remain available. A sprint
+that exhausts stamina will not resume within the same lease after stamina recovers;
+stop, check stamina, then start another bounded request. Native controller/player
+input refusals are respected, including focused build search and text viewers
+where the respective native gate applies. Close an open UI through its UI action.
+
+Use mod-specific game APIs for shortcut-only features; this bridge does not emit
+raw key events. State/method-based mods can react to these actions, but their
+patch order and behavior require validation in the actual profile.
 
 ## Live acceptance checklist — pending for 0.2.0
 
@@ -65,6 +76,8 @@ after the user authorizes restarting for that test.
 - UI clicks work at the actual resolution. Test inventory transfer/equip, food,
   chest interaction, gathering, workbench crafting and validated/costed placement.
 - Test attack, block, directional dodge, bow charge/release, sprint and jump.
+- Test build-menu delay, focused build search, text viewer, exhaustion/recovery,
+  toggle block and emergency stop while the native input delay is active.
 - Joining clients control only their character without OP; teleport stays host-only.
 - Focus loss, F12, permission revocation, stop, death, logout and unload cancel
   active/queued controls. There must be no OS events or stale session images.

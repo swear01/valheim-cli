@@ -133,8 +133,20 @@ are removed from the unreleased 0.2.0 interface.
 Movement/combat modifies arguments at the game's normal `Player.SetControls`
 call without skipping the original method. Look uses `Player.SetMouseLook`;
 interaction/hotbar/UI use their game methods/events. Placement enters the original
-`UpdatePlacement` validation/cost path. These actions retain ordinary stamina,
-materials, combat and physics rules; no OP or resource bypass is added. The private
+`UpdatePlacement` validation/cost path. Movement/look also consult the native
+`PlayerController.TakeInput` gate; world actions consult `Player.TakeInput`.
+Closing an open inventory/build selector remains possible through its UI action.
+The native input delay suppresses combat/jump/crouch/dodge while allowing movement;
+one-shot presses suppressed during that delay are discarded. A held sprint ends
+at zero stamina and needs a new input request after recovery. Hide equipment is
+refused during attacks/dodges, and the build selector respects its native delay.
+
+Stamina/material costs, combat and physics remain in game methods. This is a
+semantic action API: `run` requests held sprint regardless of the user's toggle
+binding. It does not reproduce every physical-input path. Mods that patch these
+methods or watch character state can participate; mods reading only keyboard
+shortcuts need a separate integration. Other Harmony patches may change or skip
+game methods, so modpack compatibility still needs live testing. Private input,
 interaction/placement/rotation members may change with game updates.
 
 Inventory/workbench/build UIs provide equipment, food, crafting and construction.

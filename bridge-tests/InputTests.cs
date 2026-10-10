@@ -41,8 +41,8 @@ static class InputTests
             var queued=Input();queued.controlEpoch=controls.Epoch;controls.Stop();Reject(()=>controls.Start(queued));
             controls.Start(valid);controls.Dispose();Assert(controls.Sample()==null,"Disposed control resumed");Reject(()=>controls.Start(valid));
         }
-        CheckPlugin();CheckUi();CheckEmergencyTransport();
-        System.Console.WriteLine("PASS: semantic schema, lease, edge/hold timing, game argument hook, local ownership, UI guards/events, stop epochs, placement entry, screenshot lifecycle (fixtures only)");
+        GameInput.Validate();CheckPlugin();CheckUi();CheckEmergencyTransport();
+        System.Console.WriteLine("PASS: semantic schema, lease, edge/hold timing, native permission/delay/sprint guards, game argument hook, local ownership, UI guards/events, stop epochs, placement entry, screenshot lifecycle (fixtures only)");
     }
     static void CheckEmergencyTransport()
     {
@@ -84,13 +84,36 @@ static class InputTests
         Execute(new Request{operation="stop"});
         Assert(Hook(Player.m_localPlayer).Frame.X==0,"Stop did not neutralize previous internal control");
         Assert(Hook(Player.m_localPlayer).Frame.X==0.25f,"Normal physical control did not resume");
+        PlayerController.HasInputDelay=true;
+        var delayed=Input();delayed.durationMs=5000;delayed.actions="attack,secondary,block,jump,crouch,run,dodge";
+        Execute(delayed);var delayFrame=Hook(Player.m_localPlayer).Frame;
+        Assert(delayFrame.Z==1 && delayFrame.Run && controller.Active,"Native input delay incorrectly stopped movement or sprint");
+        Assert(!delayFrame.Attack && !delayFrame.AttackHold && !delayFrame.Secondary && !delayFrame.SecondaryHold && !delayFrame.Block && !delayFrame.BlockHold && !delayFrame.Jump && !delayFrame.Crouch && !delayFrame.Dodge,"Native input delay was bypassed");
+        PlayerController.HasInputDelay=false;delayFrame=Hook(Player.m_localPlayer).Frame;
+        Assert(delayFrame.AttackHold && delayFrame.SecondaryHold && delayFrame.BlockHold && !delayFrame.Attack && !delayFrame.Jump && !delayFrame.Crouch && !delayFrame.Dodge,"Delayed one-shot actions replayed or held actions did not resume");
+        Player.m_localPlayer.Controller.InputAllowed=false;
+        var blocked=Hook(Player.m_localPlayer).Frame;
+        Assert(!controller.Active && controller.Reason=="game_input_blocked" && blocked.Z==0 && !blocked.AttackHold,"Native controller refusal did not cancel and neutralize active input");
+        Assert(!Execute(Input()).ok && !Execute(new Request{operation="look",yaw=1}).ok,"Native controller refusal accepted a new input/look");
+        Player.m_localPlayer.Controller.InputAllowed=true;
+        Player.m_localPlayer.gameObject.Components.Remove(typeof(PlayerController));
+        Assert(!Execute(Input()).ok,"Missing native controller accepted movement");
+        Player.m_localPlayer.gameObject.Components[typeof(PlayerController)]=Player.m_localPlayer.Controller;
+        Execute(hold);Assert(Hook(Player.m_localPlayer).Frame.Run,"Sprint did not start with stamina");
+        Player.m_localPlayer.Stamina=0;Assert(!Hook(Player.m_localPlayer).Frame.Run,"Exhaustion did not stop sprint");
+        Player.m_localPlayer.Stamina=10;Assert(!Hook(Player.m_localPlayer).Frame.Run,"Held sprint resumed without a new press after exhaustion");
+        Execute(new Request{operation="stop"});Execute(hold);
+        Assert(Hook(Player.m_localPlayer).Frame.Run,"New sprint request did not restore sprint after recovery");
+        Execute(new Request{operation="stop"});Hook(Player.m_localPlayer);
         Player.m_localPlayer.ToggleBlock=true;Player.m_localPlayer.m_autoRun=true;Execute(hold);
         var toggle=Hook(Player.m_localPlayer);Assert(toggle.Frame.Block && !Player.m_localPlayer.m_autoRun,"Toggle block/autorun were not adapted");
         Player.m_localPlayer.SetControls(Vector3.zero,false,false,false,false,toggle.Frame.Block,true,false,false,false,false);
         Assert(Player.m_localPlayer.Blocking && !Hook(Player.m_localPlayer).Frame.Block,"Held toggle block repeated its toggle");
+        PlayerController.HasInputDelay=true;
         Execute(new Request{operation="stop"});toggle=Hook(Player.m_localPlayer);
         Player.m_localPlayer.SetControls(Vector3.zero,false,false,false,false,toggle.Frame.Block,false,false,false,false,false);
-        Assert(!Player.m_localPlayer.Blocking,"Stop left toggle blocking enabled");Player.m_localPlayer.ToggleBlock=false;
+        Assert(!Player.m_localPlayer.Blocking,"Stop left toggle blocking enabled during native input delay");Player.m_localPlayer.ToggleBlock=false;
+        PlayerController.HasInputDelay=false;
         Player.m_localPlayer.View.Owner=false;Assert(!Execute(Input()).ok,"Non-owned player control accepted");Player.m_localPlayer.View.Owner=true;
         Console.Visible=true;Assert(!Execute(Input()).ok,"Console control accepted");Console.Visible=false;
         Menu.Visible=true;Assert(!Execute(Input()).ok,"Menu control accepted");Menu.Visible=false;
@@ -101,15 +124,38 @@ static class InputTests
         Execute(hold);Application.isFocused=false;Hook(Player.m_localPlayer);Assert(!controller.Active,"Focus loss retained lease");Application.isFocused=true;
         Execute(new Request{operation="action",action="slot",slot=1});Assert(Player.m_localPlayer.Hotbar==1,"Hotbar did not use game method");
         Execute(new Request{operation="action",action="interact"});Assert(Player.m_localPlayer.Interactions==1,"Interact did not use game method");
+        Player.m_localPlayer.NativeInputAllowed=false;
+        foreach(var name in new[]{"interact","slot","hide","guardian","place","rotate","build-menu"})
+            Assert(!Execute(new Request{operation="action",action=name,slot=name=="slot"?1:null,scroll=name=="rotate"?1:null}).ok,"Native player refusal accepted "+name);
+        Assert(Player.m_localPlayer.Interactions==1,"Refused interaction changed the game");
         Execute(new Request{operation="action",action="inventory"});Assert(InventoryGui.Visible,"Inventory game method not invoked");
         var idleEpoch=controller.Epoch;Hook(Player.m_localPlayer);Hook(Player.m_localPlayer);
         Assert(controller.Epoch==idleEpoch,"Idle physics ticks invalidated queued UI actions");
         Execute(new Request{operation="action",action="inventory"});Assert(!InventoryGui.Visible,"Inventory did not close");
+        Player.m_localPlayer.NativeInputAllowed=true;
+        foreach(var dodge in new[]{false,true})
+        {
+            Player.m_localPlayer.Attacking=!dodge;Player.m_localPlayer.Dodging=dodge;
+            try {GameActions.Execute(Player.m_localPlayer,new Request{action="hide"});throw new Exception("Hide bypassed attack/dodge guard");}
+            catch(ActionRefusedException){}
+        }
+        Player.m_localPlayer.Attacking=Player.m_localPlayer.Dodging=false;
         Player.m_localPlayer.Inventory.Items.Clear();
         try { GameActions.Execute(Player.m_localPlayer,new Request{action="slot",slot=1});throw new Exception("Empty hotbar accepted"); }
         catch(ActionRefusedException e){Assert(e.Message=="Hotbar slot is empty","Expected refusal lost its cause");}
         Player.m_localPlayer.Inventory.Items.Add(new ItemDrop.ItemData());
         Player.m_localPlayer.PlaceMode=true;
+        Execute(new Request{operation="action",action="build-menu"});Assert(Hud.Selector,"Build selector did not open");
+        Player.m_localPlayer.NativeInputAllowed=false;PlayerController.HasInputDelay=true;
+        Assert(Execute(new Request{operation="action",action="build-menu"}).ok && !Hud.Selector,"Native refusal trapped an already-open build selector");
+        Player.m_localPlayer.NativeInputAllowed=true;
+        try {GameActions.Execute(Player.m_localPlayer,new Request{action="build-menu"});throw new Exception("Build selector bypassed native delay");}
+        catch(ActionRefusedException){}
+        PlayerController.HasInputDelay=false;
+        Hud.Radial=true;
+        try {GameActions.Execute(Player.m_localPlayer,new Request{action="build-menu"});throw new Exception("Build selector bypassed radial guard");}
+        catch(ActionRefusedException){}
+        Hud.Radial=false;
         Execute(new Request{operation="action",action="place"});Assert(Player.m_localPlayer.PlacementCalls==1 && Player.m_localPlayer.Placements==0,"Placement bypassed the original game's validation");
         Player.m_localPlayer.CanPlace=true;Execute(new Request{operation="action",action="place"});Assert(Player.m_localPlayer.Placements==1,"Guarded placement path not reached");
         Execute(new Request{operation="action",action="rotate",scroll=2});Assert(Player.m_localPlayer.m_placeRotation==2,"Build rotation was not internal");
