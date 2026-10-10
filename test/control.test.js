@@ -29,39 +29,45 @@ async function fixture(handler, run) {
   finally { await new Promise(resolve => server.close(resolve)); }
 }
 
-test('Input validation rejects OS shortcuts, invalid motion and ambiguous CLI options', async () => {
-  const base = { keys: 'W', durationMs: 200 };
-  for (const change of [{ keys: 'Alt,Tab' }, { keys: 'Win' }, { keys: 'F5' }, { keys: 'F12' }, { keys: 'Control,Escape' }, { keys: 'w,W' }, { keys: 'W,' }, { durationMs: 49 }, { durationMs: 5001 }, { durationMs: 50.5 }, { mouseX: 2001 }, { scroll: 11 }, { pointerX: 0.5 }, { pointerX: 0.5, pointerY: NaN }, { pointerX: 0.5, pointerY: 0.5, mouseY: 0 }]) {
+test('Semantic control validation rejects raw keys, invalid actions and mixed commands', async () => {
+  const base = { moveZ: 1, durationMs: 200 };
+  for (const change of [{ actions: '' }, { keys: 'W' }, { buttons: 'left' }, { actions: 'attack,attack' }, { actions: 'spawn' }, { actions: 'jump,' }, { moveX: 1.1 }, { moveZ: NaN }, { durationMs: 49 }, { durationMs: 5001 }, { durationMs: 50.5 }, { yaw: 10 }]) {
     assert.throws(() => validateInput({ ...base, ...change }));
   }
   assert.throws(() => validateInput({ durationMs: 200 }), /Empty/);
-  validateInput({ keys: 'Space', buttons: 'right', durationMs: 200 });
-  validateInput({ pointerX: 0, pointerY: 1, buttons: 'left', durationMs: 200 });
-  validateInput({ mouseX: -120 }, 'mouse');
-  assert.throws(() => validateInput({ mouseX: 120, durationMs: 200 }, 'mouse'));
-  assert.throws(() => validateInput({ mouseX: 120, keys: 'W' }, 'mouse'));
-  for (const args of [['input', '--keys', 'W'], ['input', '--ms', '5001', '--keys', 'W', '--confirm'], ['input', '--keys', 'W', '--mouse-x', 'NaN', '--confirm'], ['input', 'W', '--confirm'], ['input', '--confirm'], ['status', '--keys', 'W'], ['stop', '--confirm'], ['status', '--image', 'frame.png']]) {
+  validateInput({ actions: 'jump,dodge', durationMs: 200 });
+  validateInput({ yaw: -120, pitch: 10 }, 'look');
+  validateInput({ action: 'slot', slot: 8 }, 'action');
+  validateInput({ uiAction: 'click', pointerX: 0, pointerY: 1, button: 'left' }, 'ui');
+  for (const [input, op] of [[{}, 'look'], [{ yaw: 181 }, 'look'], [{ action: 'slot', slot: 0 }, 'action'], [{ action: 'inventory', slot: 1 }, 'action'], [{ action: 'rotate', scroll: 0 }, 'action'], [{ uiAction: 'click', pointerX: 0.5 }, 'ui'], [{ uiAction: 'scroll', pointerX: 0, pointerY: 1 }, 'ui'], [{ uiAction: 'click', pointerX: 0, pointerY: Infinity }, 'ui']]) assert.throws(() => validateInput(input, op));
+  for (const args of [['input', '--move-z', '1'], ['input', '--ms', '5001', '--move-z', '1', '--confirm'], ['input', '--keys', 'W', '--confirm'], ['mouse', '--confirm'], ['input', '--confirm'], ['status', '--move-z', '1'], ['stop', '--confirm'], ['status', '--image', 'frame.png']]) {
     await assert.rejects(main([...args, '--profile', '.']));
   }
 });
 
-test('CLI sends bounded controls, status and permission-free stop without leaking tokens', async () => {
+test('CLI sends game actions, degree look and UI events without OS key fields', async () => {
   const root = await mkdtemp(join(tmpdir(), 'valheim-control-'));
   try {
     await mkdir(join(root, 'BepInEx', 'config'), { recursive: true });
     await writeFile(join(root, 'BepInEx', 'config', 'swear01.ValheimCliBridge.token'), 'a'.repeat(64));
     const commands = [];
-    await fixture(value => { commands.push(value); return { state: value.operation === 'input' ? 'started' : 'stopped' }; }, async port => {
+    await fixture(value => { commands.push(value); return { state: value.operation === 'input' ? 'started' : 'applied' }; }, async port => {
       const common = ['--profile', root, '--port', String(port)];
-      const result = await main(['input', '--keys', 'W,Shift', '--ms', '500', '--mouse-x', '120', '--confirm', ...common]);
+      const result = await main(['input', '--move-z', '1', '--actions', 'run', '--ms', '500', '--confirm', ...common]);
       assert.equal(result.state, 'started');
       await main(['stop', ...common]);
-      await main(['mouse', '--pointer-x', '0.3', '--pointer-y', '0.8', '--confirm', ...common]);
-      assert.deepEqual(commands.map(c => c.operation), ['input', 'stop', 'mouse']);
+      await main(['look', '--yaw', '30', '--pitch', '-10', '--confirm', ...common]);
+      await main(['action', '--action', 'slot', '--slot', '1', '--confirm', ...common]);
+      await main(['ui', '--ui-action', 'click', '--pointer-x', '0.3', '--pointer-y', '0.8', '--confirm', ...common]);
+      assert.deepEqual(commands.map(c => c.operation), ['input', 'stop', 'look', 'action', 'ui']);
       assert.equal(commands[0].durationMs, 500);
-      assert.equal(commands[0].mouseX, 120);
-      assert.equal(commands[0].keys, 'W,Shift');
+      assert.equal(commands[0].moveZ, 1);
+      assert.equal(commands[0].actions, 'run');
+      assert.equal(commands[0].keys, undefined);
       assert.equal(commands[1].durationMs, undefined);
+      assert.equal(commands[2].yaw, 30);
+      assert.equal(commands[2].pitch, -10);
+      assert.equal(commands[3].slot, 1);
       assert.ok(!JSON.stringify(result).includes('a'.repeat(64)));
     });
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -100,6 +106,6 @@ test('Large screenshots are accepted only for observe, and lost input acknowledg
   const server = createServer(socket => socket.once('data', () => socket.resetAndDestroy()));
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   try {
-    await assert.rejects(request({ port: server.address().port, token: 'a'.repeat(64), operation: 'input', keys: 'W', durationMs: 200 }), /outcome unknown.*stop\/status/);
+    await assert.rejects(request({ port: server.address().port, token: 'a'.repeat(64), operation: 'input', moveZ: 1, durationMs: 200 }), /outcome unknown.*stop\/status/);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });

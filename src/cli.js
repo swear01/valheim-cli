@@ -7,33 +7,52 @@ import { request } from './client.js';
 
 export const help = `valheim install --profile <Gale profile folder>
 valheim status --profile <folder> [--port 28761]
-valheim players --profile <folder> [--port 28761]
+valheim players --profile <folder>
 valheim observe --profile <folder> [--image <new.png>]
-valheim input --profile <folder> --confirm [--keys W,Shift] [--buttons left,right,middle]
-  [--ms 200] [--mouse-x 120 --mouse-y -30] [--scroll 1] [--pointer-x 0.5 --pointer-y 0.5]
-valheim mouse --profile <folder> --confirm [--mouse-x 120 --mouse-y -30 | --pointer-x 0.5 --pointer-y 0.5] [--scroll 1]
+valheim input --profile <folder> --confirm [--move-x -1..1] [--move-z -1..1]
+  [--actions attack,secondary,block,jump,crouch,run,dodge] [--ms 200]
+valheim look --profile <folder> --confirm [--yaw <degrees>] [--pitch <degrees>]
+valheim action --profile <folder> --confirm --action interact|slot|inventory|build-menu|hide|guardian|place|rotate
+  [--slot 1..8] [--scroll -10..10]
+valheim ui --profile <folder> --confirm --ui-action click|scroll
+  --pointer-x 0..1 --pointer-y 0..1 [--button left|right|middle] [--scroll -10..10]
 valheim stop --profile <folder>
-valheim teleport <x> <y> <z> --profile <folder> --confirm [--port 28761] [--request-id <UUID>]
-Coordinates are world X, Y (height), Z. Teleport requires host + AllowTeleport=true.
-Input requires Windows + AllowControl=true + foreground game. F12 revokes control.
-Input lasts 50..5000 ms and returns started; poll status until inputActive=false.
-Pointer coordinates are normalized from top left. Observe saves PNG only with --image.
-All results are JSON. No arbitrary console commands. No automatic retries.`;
+valheim teleport <x> <y> <z> --profile <folder> --confirm [--request-id <UUID>]
+Game-internal controls only. No OS keyboard/mouse injection or console execution.
+Input requires AllowControl=true + focused game. F12 revokes control.
+Movement is relative to player look. Input lasts 50..5000 ms; poll status and observe.
+Look takes degree deltas: positive yaw turns right, positive pitch looks down.
+UI coordinates start at top left. UI events are dispatched inside the game.
+Teleport coordinates are world X, Y (height), Z; requires host + AllowTeleport=true.
+All results are JSON. No automatic write retries.`;
 
-const inputOptions = { '--keys': 'keys', '--buttons': 'buttons', '--ms': 'durationMs', '--mouse-x': 'mouseX', '--mouse-y': 'mouseY', '--scroll': 'scroll', '--pointer-x': 'pointerX', '--pointer-y': 'pointerY' };
-const allowedKeys = new Set([...Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'), 'SPACE', 'SHIFT', 'CONTROL', 'TAB', 'ESCAPE', 'ENTER', 'BACKSPACE', 'LEFT', 'UP', 'RIGHT', 'DOWN']);
+const inputOptions = { '--actions': 'actions', '--move-x': 'moveX', '--move-z': 'moveZ', '--ms': 'durationMs', '--yaw': 'yaw', '--pitch': 'pitch', '--action': 'action', '--slot': 'slot', '--ui-action': 'uiAction', '--button': 'button', '--scroll': 'scroll', '--pointer-x': 'pointerX', '--pointer-y': 'pointerY' };
+const controlCommands = ['input', 'look', 'action', 'ui'];
+const stringFields = new Set(['actions', 'action', 'uiAction', 'button']);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 export function validateInput(input, operation = 'input') {
-  const keys = input.keys?.split(',') ?? [];
-  const buttons = input.buttons?.split(',') ?? [];
-  if (keys.length > 8 || keys.some(k => !allowedKeys.has(k.toUpperCase())) || new Set(keys.map(k => k.toUpperCase())).size !== keys.length || buttons.some(b => !['left', 'right', 'middle'].includes(b)) || new Set(buttons).size !== buttons.length) throw new Error('Unsupported or repeated input');
-  if (keys.some(k => k.toUpperCase() === 'CONTROL') && keys.some(k => !['CONTROL', 'SPACE'].includes(k.toUpperCase()))) throw new Error('Control may only be combined with Space (dodge)');
-  if (operation === 'mouse' ? input.keys !== undefined || input.buttons !== undefined || input.durationMs !== undefined : !Number.isInteger(input.durationMs) || input.durationMs < 50 || input.durationMs > 5000) throw new Error('Mouse takes motion only; input requires duration 50..5000 ms');
-  if (['mouseX', 'mouseY', 'scroll'].some(k => input[k] !== undefined && (!Number.isInteger(input[k]) || Math.abs(input[k]) > (k === 'scroll' ? 10 : 2000)))) throw new Error('Input motion outside bounds');
-  if ((input.pointerX === undefined) !== (input.pointerY === undefined) || ['pointerX', 'pointerY'].some(k => input[k] !== undefined && (!Number.isFinite(input[k]) || input[k] < 0 || input[k] > 1))) throw new Error('Pointer requires normalized x/y in 0..1');
-  if (input.pointerX !== undefined && (input.mouseX !== undefined || input.mouseY !== undefined)) throw new Error('Choose pointer or relative mouse motion');
-  if (!keys.length && !buttons.length && !input.mouseX && !input.mouseY && !input.scroll && input.pointerX === undefined) throw new Error('Empty input');
+  const fields = { input: ['actions', 'moveX', 'moveZ', 'durationMs'], look: ['yaw', 'pitch'], action: ['action', 'slot', 'scroll'], ui: ['uiAction', 'pointerX', 'pointerY', 'button', 'scroll'] }[operation];
+  if (!fields || Object.keys(input).some(k => !fields.includes(k))) throw new Error('Unexpected action fields');
+  const bounded = (n, max) => Number.isFinite(n) && Math.abs(n) <= max;
+  if (operation === 'input') {
+    const actions = input.actions?.split(',') ?? [];
+    if (actions.some(a => !['attack', 'secondary', 'block', 'jump', 'crouch', 'run', 'dodge'].includes(a)) || new Set(actions).size !== actions.length) throw new Error('Unsupported or repeated game action');
+    if (!Number.isInteger(input.durationMs) || input.durationMs < 50 || input.durationMs > 5000) throw new Error('Input requires duration 50..5000 ms');
+    if (!bounded(input.moveX ?? 0, 1) || !bounded(input.moveZ ?? 0, 1)) throw new Error('Movement must be in -1..1');
+    if (!input.moveX && !input.moveZ && !actions.length) throw new Error('Empty input');
+  } else if (operation === 'look') {
+    if (input.yaw === undefined && input.pitch === undefined || !bounded(input.yaw ?? 0, 180) || !bounded(input.pitch ?? 0, 180)) throw new Error('Look requires degree deltas in -180..180');
+  } else if (operation === 'action') {
+    if (!['interact', 'slot', 'inventory', 'build-menu', 'hide', 'guardian', 'place', 'rotate'].includes(input.action)) throw new Error('Unknown game action');
+    if (input.action === 'slot' ? !Number.isInteger(input.slot) || input.slot < 1 || input.slot > 8 : input.slot !== undefined) throw new Error('Slot requires 1..8 and only applies to slot');
+    if (input.action === 'rotate' ? !Number.isInteger(input.scroll) || !input.scroll || Math.abs(input.scroll) > 10 : input.scroll !== undefined) throw new Error('Rotate requires nonzero scroll in -10..10');
+  } else {
+    if (!['click', 'scroll'].includes(input.uiAction)) throw new Error('Unknown UI action');
+    if (['pointerX', 'pointerY'].some(k => !bounded(input[k], 1) || input[k] < 0)) throw new Error('UI requires normalized pointer x/y in 0..1');
+    if (input.button !== undefined && !['left', 'right', 'middle'].includes(input.button)) throw new Error('Unknown UI button');
+    if (input.uiAction === 'scroll' ? !Number.isInteger(input.scroll) || !input.scroll || Math.abs(input.scroll) > 10 : input.scroll !== undefined) throw new Error('Scroll requires nonzero -10..10');
+  }
 }
 
 export async function observe(connection, imagePath) {
@@ -97,7 +116,7 @@ export async function install(profile, artifactRoot = fileURLToPath(new URL('../
 export async function main(args) {
   if (args.length === 0 || args.length === 1 && ['--help', 'help'].includes(args[0])) return { ok: true, help };
   const command = args.shift();
-  if (!['install', 'status', 'players', 'teleport', 'observe', 'input', 'mouse', 'stop'].includes(command)) throw new Error('Unknown command. Run valheim --help');
+  if (!['install', 'status', 'players', 'teleport', 'observe', 'stop', ...controlCommands].includes(command)) throw new Error('Unknown command. Run valheim --help');
   const values = [];
   let profile;
   let port = 28761;
@@ -118,7 +137,7 @@ export async function main(args) {
       else if (value === '--image') imagePath = resolve(next);
       else if (value in inputOptions) {
         const field = inputOptions[value];
-        if (['keys', 'buttons'].includes(field)) input[field] = next;
+        if (stringFields.has(field)) input[field] = next;
         else {
           if (!/^-?\d+(\.\d+)?$/.test(next)) throw new Error(`Invalid number for ${value}`);
           input[field] = Number(next);
@@ -136,10 +155,10 @@ export async function main(args) {
     else values.push(value);
   }
   if (!profile) throw new Error('--profile is required');
-  if (!['teleport', 'input', 'mouse'].includes(command) && (values.length || confirm || id)) throw new Error('Unexpected arguments');
-  if (!['input', 'mouse'].includes(command) && Object.keys(input).length || command !== 'observe' && imagePath) throw new Error('Unexpected arguments');
-  if (command === 'input' || command === 'mouse') {
-    if (values.length || !confirm) throw new Error('input requires --confirm and named input options');
+  if (!['teleport', ...controlCommands].includes(command) && (values.length || confirm || id)) throw new Error('Unexpected arguments');
+  if (!controlCommands.includes(command) && Object.keys(input).length || command !== 'observe' && imagePath) throw new Error('Unexpected arguments');
+  if (controlCommands.includes(command)) {
+    if (values.length || !confirm) throw new Error('Control commands require --confirm and named options');
     if (command === 'input') input.durationMs ??= 200;
     validateInput(input, command);
   }

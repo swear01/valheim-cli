@@ -5,6 +5,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using UnityEngine;
 using System.Collections;
+using HarmonyLib;
 
 namespace ValheimCliBridge
 {
@@ -15,7 +16,9 @@ namespace ValheimCliBridge
         private Server server;
         private ConfigEntry<bool> allowTeleport;
         private ConfigEntry<bool> allowControl;
-        private readonly IInputBackend backend = new WindowsInput();
+        internal static Plugin Instance;
+        private Harmony harmony;
+        private bool controlReady, appliedControl;
         private InputController input;
         private Player controlledPlayer;
         private bool capturing;
@@ -28,7 +31,7 @@ namespace ValheimCliBridge
             var enabled = Config.Bind("Bridge", "Enabled", true, "Enable local CLI bridge. Restart after changes.");
             var port = Config.Bind("Bridge", "Port", 28761, new ConfigDescription("Local loopback port. Restart after changes.", new AcceptableValueRange<int>(1024, 65535)));
             allowTeleport = Config.Bind("Permissions", "AllowTeleport", false, "Allow the local host to teleport their own character. Client writes are refused.");
-            allowControl = Config.Bind("Permissions", "AllowControl", false, "Allow short Windows keyboard/mouse actions for your local character, including joining clients. Requires game foreground. F12 revokes permission. Never enable while someone else is playing this character.");
+            allowControl = Config.Bind("Permissions", "AllowControl", false, "Allow bounded game-internal actions for your local character, including joining clients. Requires game focus. F12 revokes permission. Never enable while someone else is playing this character.");
             if (!enabled.Value) return;
             try
             {
@@ -41,38 +44,67 @@ namespace ValheimCliBridge
                 var token = File.ReadAllText(tokenPath).Trim();
                 if (token.Length != 64 || token.Any(c => !"0123456789abcdef".Contains(c))) throw new InvalidDataException("Invalid local token file");
                 dispatcher = new Dispatcher(Execute);
-                input = new InputController(backend);
+                input = new InputController();
+                Instance = this;
+                GameInput.Validate();
+                harmony = new Harmony("swear01.ValheimCliBridge");
+                harmony.PatchAll(typeof(Plugin).Assembly);
+                controlReady = true;
                 server = new Server(port.Value, token, dispatcher, error => Logger.LogError("CLI bridge connection failed: " + error.GetType().Name), StopInput, () => input.Epoch);
                 Logger.LogInfo("CLI bridge listening on 127.0.0.1:" + port.Value + "; token stored in local config folder. Never share it.");
             }
             catch (Exception error)
             {
+                controlReady = false;
+                Instance = null;
+                harmony?.UnpatchSelf();
+                input?.Dispose();
                 Logger.LogError("CLI bridge did not start: " + error.GetType().Name +
                     (error is InvalidDataException ? "; stop the game, delete swear01.ValheimCliBridge.token from the config folder, and restart." : "; check the config folder permissions and whether the configured port is already in use."));
             }
         }
-        private bool CanControl(Player local) => allowControl != null && allowControl.Value && backend.Supported &&
+        private bool CanControl(Player local) => controlReady && allowControl != null && allowControl.Value && Application.isFocused &&
             local != null && ZNet.instance != null && !local.IsDead() && !local.IsTeleporting() &&
-            !Console.IsVisible() && (Chat.instance == null || !Chat.instance.HasFocus()) && !Menu.IsVisible();
+            !local.InCutscene() && local.GetComponent<ZNetView>() != null && local.GetComponent<ZNetView>().IsOwner() &&
+            !Console.IsVisible() && (Chat.instance == null || !Chat.instance.HasFocus()) && !Menu.IsVisible() && !TextInput.IsVisible() && !Minimap.InTextInput();
+        private static bool CanMove() => !InventoryGui.IsVisible() && !StoreGui.IsVisible() && !Minimap.IsOpen() &&
+            !Hud.IsPieceSelectionVisible() && !GameCamera.InFreeFly() && !PlayerCustomizaton.IsBarberGuiVisible() && !Hud.InRadial();
+        internal ControlFrame ControlFrame(Player local)
+        {
+            if (input == null || controlledPlayer != local) return null;
+            if (input.Active && (!CanControl(local) || !CanMove())) input.Stop("game_input_blocked");
+            var frame = input.Sample();
+            if (frame != null) { appliedControl = true; return frame; }
+            if (appliedControl) { appliedControl = false; return new ControlFrame(); }
+            return null;
+        }
         private void Update()
         {
-            if (allowControl != null && (backend.PanicPressed || input != null && input.PanicLatched)) allowControl.Value = false;
-            if (input != null && input.Active && controlledPlayer != Player.m_localPlayer) input.Stop("player_changed");
+            if (allowControl != null && Input.GetKey(KeyCode.F12)) { allowControl.Value = false; input?.Stop("panic"); }
+            if (input != null && controlledPlayer != Player.m_localPlayer)
+            {
+                input.Stop("player_changed");
+                controlledPlayer = Player.m_localPlayer;
+                appliedControl = false;
+            }
             input?.Permit(CanControl(Player.m_localPlayer));
             dispatcher?.Pump();
         }
+        private void OnApplicationFocus(bool focused) { if (!focused) input?.Stop("focus_lost"); }
         private void OnDestroy()
         {
+            controlReady = false;
             input?.Dispose();
-            if (input != null && input.Active) Logger.LogError("CLI input release failed during unload; tap and release the affected keys physically.");
             server?.Dispose();
+            if (appliedControl && controlledPlayer != null && controlledPlayer == Player.m_localPlayer)
+                controlledPlayer.SetControls(Vector3.zero, false, false, false, false, false, false, false, false, false, false, false);
+            Instance = null;
+            harmony?.UnpatchSelf();
         }
         private Response StopInput(string id)
         {
             input?.Stop();
-            var active = input != null && input.Active;
-            return new Response { id = id, ok = !active, state = active ? "release_failed" : "stopped", inputActive = active, inputState = input?.Reason, inputId = input?.Id,
-                error = active ? "Key release failed; release the keys physically and inspect the game" : null };
+            return new Response { id = id, ok = true, state = "stopped", inputActive = false, inputState = input?.Reason, inputId = input?.Id };
         }
         private Response Execute(Request request)
         {
@@ -88,7 +120,7 @@ namespace ValheimCliBridge
                 player = local != null ? local.GetPlayerName() : null,
                 position = local != null ? PositionOf(local.transform.position) : null,
                 teleporting = local != null && local.IsTeleporting(),
-                controlAllowed = CanControl(local), foreground = backend.Foreground,
+                controlAllowed = CanControl(local), foreground = Application.isFocused,
                 inputActive = input != null && input.Active, inputState = input?.Reason, inputId = input?.Id,
                 dead = local != null && local.IsDead(),
                 health = local != null ? local.GetHealth() : 0, maxHealth = local != null ? local.GetMaxHealth() : 0,
@@ -97,16 +129,24 @@ namespace ValheimCliBridge
             };
             if (request.operation == "stop")
                 return StopInput(request.id);
-            if (request.operation == "input" || request.operation == "mouse")
+            if (request.IsControl)
             {
-                if (!CanControl(local) || input == null) return Response.Error(request.id, "Requires Windows, a living local player, AllowControl=true, and no menu/chat/console", "cancelled");
+                if (!CanControl(local) || input == null) return Response.Error(request.id, "Requires local player ownership, game focus, AllowControl=true, and no menu/chat/console/text input", "cancelled");
+                if ((request.operation == "input" || request.operation == "look" || request.operation == "action" && request.action != "inventory" && request.action != "build-menu") && !CanMove())
+                    return Response.Error(request.id, "Close inventory, map, store, build selector or other blocking UI first", "cancelled");
+                if (request.operation == "ui" && !InventoryGui.IsVisible() && !StoreGui.IsVisible() && !Hud.IsPieceSelectionVisible())
+                    return Response.Error(request.id, "Open a game UI first", "cancelled");
+                if ((request.operation == "action" || request.operation == "ui") && input.Active)
+                    return Response.Error(request.id, "Stop movement/combat before a UI or discrete action", "cancelled");
                 input.Permit(true);
-                try { if (request.operation == "mouse") input.Motion(request); else input.Start(request); }
+                try { input.CheckEpoch(request); if (request.operation == "input") input.Start(request); }
                 catch (InvalidOperationException error) { return Response.Error(request.id, error.Message, "cancelled"); }
-                catch (IOException) { return Response.Error(request.id, "Input may have started; use stop/status before a new action. Do not retry automatically."); }
                 if (request.operation == "input") controlledPlayer = local;
+                else if (request.operation == "look") local.SetMouseLook(new Vector2((float)(request.yaw ?? 0), -(float)(request.pitch ?? 0)));
+                else if (request.operation == "action") GameActions.Execute(local, request);
+                else GameUi.Execute(request);
                 image = null;
-                response.state = request.operation == "mouse" ? "applied" : "started";
+                response.state = request.operation == "input" || request.operation == "action" && request.action == "place" ? "started" : "applied";
                 response.inputActive = input.Active;
                 response.inputState = input.Reason;
                 response.inputId = input.Id;

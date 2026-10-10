@@ -3,10 +3,10 @@ import { randomUUID } from 'node:crypto';
 
 const maxFrame = 65536;
 
-export function request({ port, token, operation, x, y, z, keys, buttons, durationMs, mouseX, mouseY, scroll, pointerX, pointerY, id = randomUUID() }) {
+export function request({ port, token, operation, x, y, z, actions, moveX, moveZ, durationMs, yaw, pitch, action, slot, uiAction, button, scroll, pointerX, pointerY, id = randomUUID() }) {
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid bridge port');
   if (!/^[a-f0-9]{64}$/.test(token)) throw new Error('Invalid local token');
-  const body = Buffer.from(JSON.stringify({ id, token, operation, x, y, z, keys, buttons, durationMs, mouseX, mouseY, scroll, pointerX, pointerY }));
+  const body = Buffer.from(JSON.stringify({ id, token, operation, x, y, z, actions, moveX, moveZ, durationMs, yaw, pitch, action, slot, uiAction, button, scroll, pointerX, pointerY }));
   const maxResponse = operation === 'observe' ? 8 * 1024 * 1024 : maxFrame;
   if (body.length > maxFrame) throw new Error('Request too large');
   const header = Buffer.alloc(4);
@@ -24,7 +24,7 @@ export function request({ port, token, operation, x, y, z, keys, buttons, durati
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      if (submitted && ['teleport', 'input', 'mouse'].includes(operation) && !acknowledged) error.message += ' Write outcome unknown; do not automatically retry. Use stop/status.';
+      if (submitted && ['teleport', 'input', 'look', 'action', 'ui'].includes(operation) && !acknowledged) error.message += ' Write outcome unknown; do not automatically retry. Use stop/status.';
       reject(error);
     }
     socket.once('connect', () => { submitted = true; socket.write(Buffer.concat([header, body])); });

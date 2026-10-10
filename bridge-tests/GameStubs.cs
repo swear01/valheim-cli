@@ -1,10 +1,27 @@
 // Game API fixture for policy tests; never included in the plugin build.
 namespace UnityEngine
 {
-    public struct Vector3 { public float x, y, z; public Vector3(float x, float y, float z) { this.x = x; this.y = y; this.z = z; } }
+    public struct Vector3 { public static Vector3 zero => new(); public float x, y, z; public Vector3(float x, float y, float z) { this.x = x; this.y = y; this.z = z; } }
     public struct Quaternion { }
     public sealed class Transform { public Vector3 position, eulerAngles; public Quaternion rotation; }
-    public static class Time { public static float realtimeSinceStartup; }
+    public static class Time { public static float realtimeSinceStartup, time, deltaTime = 0.02f; }
+    public struct Vector2 { public float x, y; public Vector2(float x, float y) { this.x=x; this.y=y; } public static Vector2 operator -(Vector2 a, Vector2 b) => new(a.x-b.x,a.y-b.y); }
+    public static class Application { public static bool isFocused = true; }
+    public enum KeyCode { F12 }
+    public static class Input { public static bool Panic; public static bool GetKey(KeyCode key) => Panic; }
+    public static class Screen { public static int width = 1600, height = 900; }
+    public class GameObject
+    {
+        public readonly Dictionary<Type, object> Components = new();
+        public readonly Dictionary<Type, Action<EventSystems.BaseEventData>> Handlers = new();
+        public T GetComponentInParent<T>() where T:class => Components.GetValueOrDefault(typeof(T)) as T;
+    }
+    public class Component
+    {
+        public GameObject gameObject = new();
+        public T GetComponent<T>() where T:class => gameObject.Components.GetValueOrDefault(typeof(T)) as T;
+    }
+    public class Canvas : Component { }
     public sealed class Camera { public static Camera main; public Transform transform = new(); }
     public class Texture2D
     {
@@ -56,12 +73,33 @@ public sealed class ZNet
     public bool IsServer() => Host;
     public string GetWorldName() => "fixture-world";
 }
-public sealed class Player
+public sealed class Player : UnityEngine.Component
 {
     public static Player m_localPlayer;
     public static bool NullList;
     public UnityEngine.Transform transform = new();
-    public bool Dead, Teleporting, AcceptTeleport = true;
+    public bool Dead, Teleporting, Cutscene, PlaceMode, AcceptTeleport = true, GuardianAllowed = true;
+    public readonly Inventory Inventory = new();
+    public readonly ZNetView View = new();
+    public UnityEngine.GameObject Hover = new();
+    public UnityEngine.Vector2 Look;
+    public int Hotbar, Interactions, PlacementCalls, Placements, m_placeRotation;
+    private float m_placePressedTime = -1000;
+    private bool m_blocking = false;
+    public bool ToggleBlock, m_autoRun;
+    public bool Blocking => m_blocking;
+    public bool CanPlace;
+    public Player() { gameObject.Components[typeof(ZNetView)] = View; }
+    public bool InCutscene() => Cutscene;
+    public bool InPlaceMode() => PlaceMode;
+    public void SetMouseLook(UnityEngine.Vector2 value) { Look = value; }
+    public bool HideHandItems(bool onlyRightHand = false, bool animation = true) => true;
+    public bool StartGuardianPower() => GuardianAllowed;
+    public UnityEngine.GameObject GetHoverObject() => Hover;
+    private void Interact(UnityEngine.GameObject target, bool hold, bool alt) { Interactions++; }
+    public void UseHotbarItem(int slot) { Hotbar = slot; }
+    private void UpdatePlacement(bool takeInput, float dt) { PlacementCalls++; if (CanPlace && takeInput && m_placePressedTime == UnityEngine.Time.time) Placements++; }
+    public void SetControls(UnityEngine.Vector3 movedir, bool attack, bool attackHold, bool secondaryAttack, bool secondaryAttackHold, bool block, bool blockHold, bool jump, bool crouch, bool run, bool autoRun, bool dodge = false) { m_blocking = ToggleBlock ? block ? !m_blocking : m_blocking : blockHold; }
     public string GetPlayerName() => "fixture-player";
     public bool IsDead() => Dead;
     public bool IsTeleporting() => Teleporting;
@@ -69,14 +107,19 @@ public sealed class Player
     public float GetMaxHealth() => 25;
     public float GetStamina() => 50;
     public float GetMaxStamina() => 50;
-    public Inventory GetInventory() => new();
+    public Inventory GetInventory() => Inventory;
     public bool TeleportTo(UnityEngine.Vector3 target, UnityEngine.Quaternion rotation, bool distant) { if (AcceptTeleport) Teleporting = true; return AcceptTeleport; }
     public static List<Player> GetAllPlayers() => NullList ? null : m_localPlayer == null ? new() : new() { null, m_localPlayer };
 }
 public static class Console { public static bool Visible; public static bool IsVisible() => Visible; }
 public static class Menu { public static bool Visible; public static bool IsVisible() => Visible; }
 public sealed class Chat { public static Chat instance; public bool Focus; public bool HasFocus() => Focus; }
-public sealed class Inventory { public List<ItemDrop.ItemData> GetAllItems() => new() { new() }; }
+public sealed class Inventory
+{
+    public readonly List<ItemDrop.ItemData> Items = new() { new() };
+    public List<ItemDrop.ItemData> GetAllItems() => Items;
+    public ItemDrop.ItemData GetItemAt(int x, int y) => Items.FirstOrDefault(i=>i.m_gridPos.x==x && i.m_gridPos.y==y);
+}
 public static class ItemDrop
 {
     public sealed class ItemData
@@ -85,4 +128,69 @@ public static class ItemDrop
     }
     public sealed class Shared { public string m_name = "$item_club"; }
     public struct GridPos { public int x, y; }
+}
+
+public sealed class ZNetView { public bool Owner = true; public bool IsOwner() => Owner; }
+public static class TextInput { public static bool Visible; public static bool IsVisible()=>Visible; }
+public static class Minimap { public static bool Open, Typing; public static bool IsOpen()=>Open; public static bool InTextInput()=>Typing; }
+public static class StoreGui { public static bool Visible; public static bool IsVisible()=>Visible; }
+public static class GameCamera { public static bool FreeFly; public static bool InFreeFly()=>FreeFly; }
+public static class PlayerCustomizaton { public static bool Visible; public static bool IsBarberGuiVisible()=>Visible; }
+public sealed class Container { }
+public sealed class InventoryGui
+{
+    public static InventoryGui instance = new(); public static bool Visible;
+    public static bool IsVisible()=>Visible; public void Hide(){Visible=false;} public void Show(Container c, int group=1){Visible=true;}
+}
+public sealed class Hud
+{
+    public static Hud instance = new(); public static bool Selector, Radial;
+    public static bool IsPieceSelectionVisible()=>Selector; public static bool InRadial()=>Radial;
+    public void TogglePieceSelection(){Selector=!Selector;}
+}
+namespace HarmonyLib
+{
+    [AttributeUsage(AttributeTargets.Class)] public sealed class HarmonyPatch : Attribute { public HarmonyPatch(Type type, string method) { } }
+    public sealed class Harmony { public Harmony(string id) { } public void PatchAll(System.Reflection.Assembly assembly) { } public void UnpatchSelf() { } }
+    public static class AccessTools
+    {
+        public static System.Reflection.MethodInfo Method(Type t, string name, Type[] parameters) => t.GetMethod(name, System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic, null, parameters, null);
+        public static System.Reflection.FieldInfo Field(Type t, string name) => t.GetField(name,System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic);
+    }
+}
+namespace UnityEngine.EventSystems
+{
+    public class BaseEventData { }
+    public sealed class PointerEventData : BaseEventData
+    {
+        public enum InputButton { Left, Right, Middle }
+        public Vector2 position, scrollDelta, pressPosition; public InputButton button;
+        public RaycastResult pointerCurrentRaycast, pointerPressRaycast;
+        public GameObject pointerPress;
+        public bool eligibleForClick; public int clickCount;
+        public PointerEventData(EventSystem system) { }
+    }
+    public struct RaycastResult { public GameObject gameObject; }
+    public sealed class EventSystem
+    {
+        public static EventSystem current;
+        public readonly List<RaycastResult> Hits = new();
+        public void RaycastAll(PointerEventData data,List<RaycastResult> hits){hits.AddRange(Hits);}
+    }
+    public interface IPointerClickHandler { } public interface IPointerDownHandler { } public interface IPointerUpHandler { }
+    public interface IScrollHandler { }
+    public static class ExecuteEvents
+    {
+        public delegate void EventFunction<T>(T handler, BaseEventData data);
+        public static readonly EventFunction<IPointerClickHandler> pointerClickHandler = (_,_)=>{};
+        public static readonly EventFunction<IPointerDownHandler> pointerDownHandler = (_,_)=>{};
+        public static readonly EventFunction<IPointerUpHandler> pointerUpHandler = (_,_)=>{};
+        public static readonly EventFunction<IScrollHandler> scrollHandler = (_,_)=>{};
+        public static GameObject GetEventHandler<T>(GameObject target) => target?.Handlers.ContainsKey(typeof(T))==true ? target : null;
+        public static bool Execute<T>(GameObject target, BaseEventData data,EventFunction<T> handler)
+        {
+            if(target!=null && target.Handlers.TryGetValue(typeof(T),out var action)){action(data);return true;} return false;
+        }
+        public static GameObject ExecuteHierarchy<T>(GameObject target, BaseEventData data,EventFunction<T> handler) => Execute(target,data,handler) ? target : null;
+    }
 }

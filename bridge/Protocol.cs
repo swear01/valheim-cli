@@ -20,22 +20,28 @@ namespace ValheimCliBridge
         [DataMember(EmitDefaultValue = false)] public double? x;
         [DataMember(EmitDefaultValue = false)] public double? y;
         [DataMember(EmitDefaultValue = false)] public double? z;
-        [DataMember(EmitDefaultValue = false)] public string keys;
-        [DataMember(EmitDefaultValue = false)] public string buttons;
+        [DataMember(EmitDefaultValue = false)] public string actions;
+        [DataMember(EmitDefaultValue = false)] public double? moveX;
+        [DataMember(EmitDefaultValue = false)] public double? moveZ;
         [DataMember(EmitDefaultValue = false)] public int? durationMs;
-        [DataMember(EmitDefaultValue = false)] public int? mouseX;
-        [DataMember(EmitDefaultValue = false)] public int? mouseY;
+        [DataMember(EmitDefaultValue = false)] public double? yaw;
+        [DataMember(EmitDefaultValue = false)] public double? pitch;
+        [DataMember(EmitDefaultValue = false)] public string action;
+        [DataMember(EmitDefaultValue = false)] public int? slot;
+        [DataMember(EmitDefaultValue = false)] public string uiAction;
+        [DataMember(EmitDefaultValue = false)] public string button;
         [DataMember(EmitDefaultValue = false)] public int? scroll;
         [DataMember(EmitDefaultValue = false)] public double? pointerX;
         [DataMember(EmitDefaultValue = false)] public double? pointerY;
         internal long? controlEpoch;
-        public bool IsWrite => operation == "teleport" || operation == "input" || operation == "mouse";
+        public bool IsControl => operation == "input" || operation == "look" || operation == "action" || operation == "ui";
+        public bool IsWrite => operation == "teleport" || IsControl;
 
         public void Validate()
         {
             if (!Guid.TryParseExact(id, "D", out _) || token == null || token.Length != 64)
                 throw new InvalidDataException("Invalid request schema");
-            if (operation != "status" && operation != "players" && operation != "teleport" && operation != "observe" && operation != "input" && operation != "mouse" && operation != "stop")
+            if (operation != "status" && operation != "players" && operation != "teleport" && operation != "observe" && !IsControl && operation != "stop")
                 throw new InvalidDataException("Unknown operation");
             if (operation == "teleport")
             {
@@ -43,9 +49,31 @@ namespace ValheimCliBridge
                     throw new InvalidDataException("Invalid coordinates");
             }
             else if (x.HasValue || y.HasValue || z.HasValue) throw new InvalidDataException("Unexpected coordinates");
-            if (operation == "input" || operation == "mouse") InputSpec.Validate(this);
-            else if (keys != null || buttons != null || durationMs.HasValue || mouseX.HasValue || mouseY.HasValue || scroll.HasValue || pointerX.HasValue || pointerY.HasValue)
+            if (operation == "input") InputSpec.Validate(this);
+            else if (actions != null || moveX.HasValue || moveZ.HasValue || durationMs.HasValue)
                 throw new InvalidDataException("Unexpected input fields");
+            if (operation == "look")
+            {
+                if (!yaw.HasValue && !pitch.HasValue || !InputSpec.Bounded(yaw ?? 0, 180) || !InputSpec.Bounded(pitch ?? 0, 180))
+                    throw new InvalidDataException("Look requires finite yaw/pitch deltas in -180..180 degrees");
+            }
+            else if (yaw.HasValue || pitch.HasValue) throw new InvalidDataException("Unexpected look fields");
+            if (operation == "action")
+            {
+                if (action != "interact" && action != "slot" && action != "inventory" && action != "build-menu" && action != "hide" && action != "guardian" && action != "place" && action != "rotate")
+                    throw new InvalidDataException("Unknown game action");
+                if (action == "slot" ? !slot.HasValue || slot < 1 || slot > 8 : slot.HasValue) throw new InvalidDataException("Slot requires 1..8 and only applies to the slot action");
+                if (action == "rotate" ? !scroll.HasValue || scroll == 0 || Math.Abs((long)scroll.Value) > 10 : scroll.HasValue) throw new InvalidDataException("Rotate requires nonzero scroll in -10..10");
+            }
+            else if (action != null || slot.HasValue) throw new InvalidDataException("Unexpected game action fields");
+            if (operation == "ui")
+            {
+                if (uiAction != "click" && uiAction != "scroll") throw new InvalidDataException("Unknown UI action");
+                if (!pointerX.HasValue || !pointerY.HasValue || !Finite(pointerX) || !Finite(pointerY) || pointerX < 0 || pointerX > 1 || pointerY < 0 || pointerY > 1) throw new InvalidDataException("UI requires normalized pointer x/y in 0..1");
+                if (button != null && button != "left" && button != "right" && button != "middle") throw new InvalidDataException("Unknown UI button");
+                if (uiAction == "scroll" ? !scroll.HasValue || scroll == 0 || Math.Abs((long)scroll.Value) > 10 : scroll.HasValue) throw new InvalidDataException("Scroll requires nonzero -10..10");
+            }
+            else if (uiAction != null || button != null || pointerX.HasValue || pointerY.HasValue || operation != "action" && scroll.HasValue) throw new InvalidDataException("Unexpected UI fields");
         }
         private static bool Finite(double? value) => value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value);
     }
@@ -128,8 +156,8 @@ namespace ValheimCliBridge
                 while (reader.Read())
                 {
                     if (reader.NodeType != XmlNodeType.Element) continue;
-                    var textField = reader.Name == "id" || reader.Name == "token" || reader.Name == "operation" || reader.Name == "keys" || reader.Name == "buttons";
-                    var numberField = reader.Name == "x" || reader.Name == "y" || reader.Name == "z" || reader.Name == "durationMs" || reader.Name == "mouseX" || reader.Name == "mouseY" || reader.Name == "scroll" || reader.Name == "pointerX" || reader.Name == "pointerY";
+                    var textField = reader.Name == "id" || reader.Name == "token" || reader.Name == "operation" || reader.Name == "actions" || reader.Name == "action" || reader.Name == "uiAction" || reader.Name == "button";
+                    var numberField = reader.Name == "x" || reader.Name == "y" || reader.Name == "z" || reader.Name == "durationMs" || reader.Name == "moveX" || reader.Name == "moveZ" || reader.Name == "yaw" || reader.Name == "pitch" || reader.Name == "slot" || reader.Name == "scroll" || reader.Name == "pointerX" || reader.Name == "pointerY";
                     if (reader.Depth != 1 || !fields.Add(reader.Name) || (!textField && !numberField))
                         throw new InvalidDataException("Invalid request fields");
                     var kind = reader.GetAttribute("type");

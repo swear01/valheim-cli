@@ -1,40 +1,41 @@
 # Valheim Agent CLI
 
 A local CLI and BepInEx bridge for an agent controlling **your own character**.
-No LLM, autonomous bot or ValheimMCP dependency is bundled. A shell-capable agent
-uses JSON state and game screenshots to choose ordinary keyboard/mouse actions.
+The agent reads JSON state and game screenshots, then requests game actions.
+Controls run inside Valheim; no OS keyboard/mouse events, shell/console execution,
+LLM, autonomous bot or ValheimMCP dependency is bundled.
 
-**0.2.0 is experimental and has not been tested in a running game.** The earlier
-0.1.0 build was smoke-tested in Windows Valheim 1.0.17, but that does not validate
-this release's new input or screenshot implementation. Compilation targets
-Valheim 1.0.16. Automated tests use game and input fixtures, not a real player.
+**0.2.0 is experimental and has not been tested in a running game.** Production
+builds target Valheim 1.0.16 references; an additional local build against the
+actual 1.0.17 game assembly passed. Neither compilation nor fixtures prove runtime
+Harmony, UI, GPU capture, multiplayer or full-playthrough compatibility. Only the
+earlier 0.1.0 release was smoke-tested in Windows Valheim 1.0.17.
 
 ## Install
 
-Install Node.js 22+ on the same computer as Valheim. Download the CLI tarball from
-[GitHub Releases](https://github.com/swear01/valheim-cli/releases), then install it:
+Install Node.js 22+ on the same computer as Valheim. Download the experimental CLI
+tarball when provided, then install it:
 
 ```sh
 npm install -g ./valheim-agent-cli-0.2.0.tgz
 valheim install --profile "C:\path\to\Gale\profile"
 ```
 
-An npm registry publication is not implied. Exit Valheim before installing or
-upgrading. The installer checks the bundled DLL hash and preserves other mods and
-settings. It refuses to overwrite a different existing DLL: back up/remove only
-that bridge first. If using the Thunderstore package, let the mod manager install
-the DLL instead; do not install a second copy through the CLI. The internal plugin
-GUID, DLL and configuration filenames remain `ValheimCliBridge`.
+0.2.0 is not published to npm or Thunderstore. Exit Valheim before upgrading.
+The installer checks the bundled DLL hash and preserves other mods/settings. It
+refuses to overwrite a different DLL: back up/remove only that bridge first.
+For Thunderstore installation, use the mod manager instead of installing a second
+copy through the CLI. Internal GUID/DLL/config filenames remain `ValheimCliBridge`.
 
-On first modded launch the bridge generates these local files:
+On first modded launch the bridge generates:
 
 - `BepInEx/config/swear01.ValheimCliBridge.cfg`
 - `BepInEx/config/swear01.ValheimCliBridge.token`
 
 Keep the random token private and out of modpacks. It inherits the profile's OS
 permissions. There are no npm install hooks or runtime downloads. Only the
-computer running the controlled character needs this bridge; the teammate and
-server do not need it for ordinary input. This is not a dedicated-server bot.
+computer running the controlled character needs this bridge. A teammate/server
+does not need it for ordinary actions. This is not a dedicated-server bot.
 
 ## Enable character control
 
@@ -47,134 +48,133 @@ AllowControl = true
 AllowTeleport = false
 ```
 
-Normal input supports either the host's or a joining player's own character.
-It does not grant OP or bypass stamina, materials, combat, physics or game rules.
-Input requires Windows, a living character in a world, and the game's foreground
-window. System menu, chat and console block new input. Inventory and build menus
-remain available. Permission changes through the configuration manager apply
-on the next game update; Enabled / Port changes need a restart.
+Control requires ownership of the local, living character, a focused game and no
+system menu, chat, console, text input, cutscene or teleport. It works for the host
+or a joining player without OP. Movement/combat/look are blocked while inventory,
+map, store, build selector or other blocking UI is open. UI commands require an
+open inventory, store or build selector. Settings permission changes apply on the
+next game update; Enabled / Port changes need a restart. Keep the game focused
+and do not control the same character concurrently.
 
-**Press F12 to release input and revoke AllowControl.** Re-enable it manually to
-resume. `valheim stop` also releases input, without revoking the permission. It is
-authenticated but needs neither permission nor a host role, and runs independently
-of Unity's main-thread dispatcher. Do not play the same character concurrently.
+**F12 cancels actions and revokes AllowControl.** Re-enable it manually to resume.
+`valheim stop` cancels the managed control lease without revoking permission. It
+is authenticated, bypasses Unity's request queue, and requires neither permission
+nor a host role. The next game control tick receives a neutral frame, then normal
+human input resumes. The independent 20 ms watchdog expires leases even when the
+main thread stalls, but game state cannot update until that thread resumes.
 
 ## Observe, act, verify
 
-Use the same `--profile` folder on every command; optional `--port` defaults to 28761.
+Use the same `--profile` folder on each command; optional `--port` defaults to 28761.
 
 ```sh
-valheim status --profile "C:\path\to\profile"
-valheim players --profile "C:\path\to\profile"
-valheim observe --profile "C:\path\to\profile" --image frame-001.png
-valheim input --profile "C:\path\to\profile" --keys W,Shift --ms 500 --confirm
-valheim status --profile "C:\path\to\profile"
-valheim stop --profile "C:\path\to\profile"
+valheim status --profile <folder>
+valheim players --profile <folder>
+valheim observe --profile <folder> --image frame-001.png
+valheim input --profile <folder> --move-z 1 --actions run --ms 500 --confirm
+valheim look --profile <folder> --yaw 30 --pitch -10 --confirm
+valheim stop --profile <folder>
 ```
 
-`status` includes position, camera Euler angles in degrees, health, stamina,
-death/teleport state, foreground status, permission and input activity. `players`
-returns currently loaded player objects, not the complete remote server roster.
+`status` includes position, camera Euler angles, health, stamina, death/teleport
+state, game focus, permission and control lease activity. `players` returns
+currently loaded player objects, not the complete remote server roster.
 
-`observe` adds inventory item name tokens, stacks, quality, equipped state and
-zero-based grid positions, plus a game-only screenshot taken after rendering.
-Images retain aspect ratio within 1280×720. `capturedAt` is the image's UTC capture
-time; state is queried separately. Images can be reused for at most 500 ms and are
-invalidated when input or teleport starts. The CLI polls pending screenshot reads,
-never write requests. `--image` writes a new PNG file and refuses to overwrite an
-existing file. JSON contains the path and dimensions, never base64. Without
-`--image`, only observation metadata is printed. Paused/background rendering may
-time out; the CLI reports this explicitly.
+`observe` adds item name tokens, stacks, quality, equipped state, zero-based grid
+positions and a game-only screenshot captured after rendering. Images fit within
+1280×720 while retaining aspect ratio. `capturedAt` is the image's UTC capture
+time; state is queried separately. Images may be reused for at most 500 ms and
+are invalidated by actions/teleport. The CLI polls pending screenshot reads, never
+writes. `--image` saves a new PNG without overwriting files. JSON contains its
+path/dimensions, never base64. Without `--image`, only metadata is printed.
+Background/paused rendering may time out explicitly.
 
-`mouse` accepts only mouse motion/scroll. It can adjust aim, turn while walking or
-drag a held button without extending the existing hold. A mouse-only operation
-returns `state: "applied"`; verify its effect with an observation.
+`input` returns `started` and an `inputId` before any game tick, not proof of motion
+or success. Poll `status` until `inputActive=false`, check `inputState`, then verify
+the outcome with position or a fresh image. Another input is refused during a
+lease. `look` can adjust aim during a lease without extending it. Discrete actions
+and UI events require the lease to finish or be stopped first. `applied` means the
+handler ran; original game requirements can still refuse the intended result.
 
-`input` returns `state: "started"` with an `inputId`; it does not wait for movement
-or prove success. Poll `status` until `inputActive=false` and inspect `inputState`.
-Another input is refused while one is active. Verify the position or a fresh
-screenshot before deciding the next action. An interrupted input may have already
-moved, attacked or consumed something; do not replay it automatically.
+## Action reference
 
-## Input reference
+All examples require `--profile <folder> --confirm`. Bindings and OS mouse
+sensitivity do not affect these commands.
 
-Actions use the player's existing bindings. These examples assume default controls;
-relative mouse units are OS mouse motion, not degrees. Sensitivity and acceleration
-change the result, so use short moves and observe the camera afterward.
-
-| Purpose | Options after `valheim input --profile <folder> --confirm` |
+| Purpose | Command/options |
 | --- | --- |
-| Walk / sprint | `--keys W --ms 500` / `--keys W,Shift --ms 500` |
-| Jump / roll | `--keys Space --ms 100` / `--keys Space --buttons right --ms 100` |
-| Look / aim | `--mouse-x 120 --mouse-y -30` |
-| Attack / block | `--buttons left --ms 100` / `--buttons right --ms 500` |
-| Charged bow | `--buttons left --ms 2500` (release fires when equipped and ready) |
-| Interact / equip slot | `--keys E --ms 100` / `--keys 1 --ms 100` |
-| Inventory / build menu | `--keys Tab --ms 100` / `--buttons right --ms 100` with hammer |
-| UI click / drag | `--pointer-x 0.3 --pointer-y 0.4 --buttons left --ms 100` |
-| Look / move pointer while held | `valheim mouse --profile <folder> --mouse-x 60 --confirm` or `--pointer-x 0.5 --pointer-y 0.6` |
-| Scroll / rotate building | `--scroll 1` |
+| Walk / sprint | `input --move-z 1 --ms 500` / add `--actions run` |
+| Strafe / reverse | `input --move-x -1 --ms 200` / `--move-z -1` |
+| Attack / block | `input --actions attack --ms 100` / `--actions block --ms 500` |
+| Charge bow | `input --actions attack --ms 2500` (neutral frame releases) |
+| Jump / crouch toggle / dodge | `input --actions jump --ms 100` / `crouch` / `dodge` |
+| Turn / aim | `look --yaw 30 --pitch -10` |
+| Interact with crosshair target | `action --action interact` |
+| Use/equip hotbar slot | `action --action slot --slot 1` |
+| Toggle inventory / build selector | `action --action inventory` / `--action build-menu` |
+| Hide hand items / guardian power | `action --action hide` / `--action guardian` |
+| Place selected piece / rotate | `action --action place` / `--action rotate --scroll 1` |
+| Game UI click | `ui --ui-action click --pointer-x 0.3 --pointer-y 0.4 --button left` |
+| Game UI scroll | `ui --ui-action scroll --pointer-x 0.3 --pointer-y 0.4 --scroll -1` |
 
-Pointer coordinates are relative to the game client area: `(0,0)` top left,
-`(1,1)` bottom right. Use absolute pointer coordinates in a visible UI, and relative
-motion for the camera. They cannot be combined in one request. Holds last
-50–5000 ms (default 200); motion is limited to ±2000 per axis, wheel to ±10 notches.
-Keys: A–Z, 0–9, Space, Shift, Control, Tab, Escape, Enter, Backspace and arrow names
-Left/Up/Right/Down. Keys are comma-separated, case-insensitive, at most eight;
-buttons are lowercase left/right/middle. No Alt, Windows or function keys are
-accepted. Control may be combined only with Space to avoid system shortcuts.
-Keys and buttons are released automatically at the deadline, on focus loss,
-permission revocation, F12, plugin unload or `stop`.
+Movement X/Z is relative to the player's look, bounded to -1…1; diagonals are
+normalized. `actions` accepts comma-separated attack, secondary, block, jump,
+crouch, run, dodge. Duration is 50–5000 ms (default 200). Attack/block have press
+and hold states; jump/crouch/dodge fire once per lease. Crouch is the game's toggle
+and can persist after the lease. A lease is not an autonomous navigation plan.
 
-The agent can use the normal inventory, workbench and build UIs for equipment,
-eating, crafting and construction. There are no semantic `craft`, `build`, combat
-AI or navigation commands; providing input does not prove an agent can reliably
-complete a boss fight or an entire playthrough. See [the agent play guide](docs/agent-play.md)
-for an operating loop and the required live acceptance tests.
+Yaw/pitch are degree deltas within ±180: positive yaw turns right, positive pitch
+looks down. UI coordinates use the rendered game area, `(0,0)` top left and `(1,1)`
+bottom right. UI dispatch uses Unity EventSystem; it never moves the OS cursor.
+Click an inventory item, then its destination to move it. Scroll/rotation accepts
+nonzero integers within ±10. Raw `--keys`, `--buttons`, `--mouse-x/y` and `mouse`
+are removed from the unreleased 0.2.0 interface.
+
+Movement/combat modifies arguments at the game's normal `Player.SetControls`
+call without skipping the original method. Look uses `Player.SetMouseLook`;
+interaction/hotbar/UI use their game methods/events. Placement enters the original
+`UpdatePlacement` validation/cost path. These actions retain ordinary stamina,
+materials, combat and physics rules; no OP or resource bypass is added. The private
+interaction/placement/rotation members may change with game updates.
+
+Inventory/workbench/build UIs provide equipment, food, crafting and construction.
+There is no autonomous navigation, combat AI, semantic craft planner or proof that
+an agent can complete a playthrough. See [the agent guide](docs/agent-play.md) for
+an operating loop and pending live acceptance checks.
 
 ## Teleport
 
 ```sh
-valheim teleport 120 45 -230 --profile "C:\path\to\profile" --confirm
+valheim teleport 120 45 -230 --profile <folder> --confirm
 ```
 
 This separate permission remains host-only and off by default (`AllowTeleport`).
-Joining admins cannot teleport through the bridge. Coordinates are X, Y (height),
+Joining admins cannot teleport through this bridge. Coordinates are X, Y (height),
 Z: X/Z within ±10500, Y within -1000…5000. Bounds do not ensure safe ground.
-`state: "started"` is not arrival: check `teleporting` and actual position afterward.
-Use only a known safe destination in a test/backup world.
+`started` is not arrival: verify `teleporting` and actual position. Use only known
+safe destinations in a test/backup world.
 
 ## Transport and failure limits
 
-The CLI connects only to `127.0.0.1:28761`. Every operation requires the local
-256-bit token and a UUID. No shell/console execution API, world-file editing,
-outbound AI connection or network service is added. Never forward the port.
+Only `127.0.0.1:28761` listens. Every operation needs the local 256-bit token and a
+UUID. No outbound AI endpoint or world-file editing is added. Never forward the
+port. Frames use a four-byte big-endian length plus JSON: requests/ordinary replies
+≤64 KiB, images ≤8 MiB. Connections last at most four seconds; the bounded Unity
+queue has a two-second deadline. Unity access stays on the main thread; the
+network stop callback and expiry timer only update managed lease state.
 
-Frames use a 4-byte big-endian length plus JSON. Requests and ordinary replies are
-capped at 64 KiB; image replies at 8 MiB. Connections last at most four seconds,
-with a bounded queue and two-second main-thread queue deadline. Input release is
-also checked every 20 ms by an independent timer so a Unity stall or disconnected
-CLI does not extend a hold past its deadline under normal process operation.
-
-Use `--request-id <UUID>` for input/mouse/teleport when tracking an operation. IDs of
-started or uncertain writes are retained until restart (65,536 maximum); confirmed
-cancelled requests do not consume an ID. A duplicate write is rejected. `stop`
-bypasses both the write-history cap and Unity queue. Accepted but queued controls
-are invalidated by stop, revocation or loss of control. A restart clears replay
-history; a new UUID is a new action. Never automatically retry a timed-out write:
-use `stop`, inspect status and observe the result first.
-
-Windows SendInput targets the foreground application. Each native event checks
-that Valheim owns that window, but focus can change between a check and injection.
-Keep Valheim foreground and do not use the desktop during agent control. Physical
-held modifiers block new actions. A hard process kill/OS crash prevents the
-in-process release watchdog from running; physically tap/release any affected keys.
-Failed releases remain visible and are retried by the watchdog.
+Use `--request-id <UUID>` on writes to track them. Started/uncertain write IDs are
+retained until restart (65,536 maximum); cancelled requests do not consume an ID.
+Duplicates are refused. Stop bypasses this cap and invalidates queued controls.
+Revocation/loss of control also invalidates queued controls. Restart clears replay
+history; a new UUID is a new action. Never retry a timed-out write automatically:
+send stop, inspect status, then observe. Cancellation cannot undo damage, resources
+already spent, a crouch toggle or a crafting job already started.
 
 ## Build and verification
 
-Requires Node.js 22+ and .NET SDK 9. Compile-only, pinned NuGet references are never
-included in the distributable. No new runtime dependency is required for control.
+Requires Node.js 22+ and .NET SDK 9. Pinned NuGet references are compile-only and
+never bundled. Control uses the game's existing Harmony/Unity UI runtime.
 
 ```sh
 npm run test:bridge
@@ -184,15 +184,15 @@ npm run pack:bridge
 npm pack
 ```
 
-CI runs on Windows and Linux. Tests exercise the production protocol, dispatcher,
-replay guard and Node-to-C# TCP connection; an injected input backend verifies
-leases, stop, focus, F12, revocation, failure rollback and release retry. Screenshot
-fixtures exercise scheduling and cleanup, not actual GPU capture. The Windows
-SendInput structure layout is checked but **no automated test injects real OS
-input or launches Valheim**. New controls, UI actions, screenshots, multiplayer
-behavior and long sessions still require the dedicated test-world checklist.
+CI runs on Windows/Linux. Tests cover the production protocol, dispatcher, replay
+protection, Node-to-C# TCP, lease expiry, edge/hold actions, hook arguments, local
+ownership, focus/UI guards, stop epochs, game-action calls, UI events and screenshot
+cleanup. Game/UI/Harmony fixtures do not execute real runtime patches or render
+real pixels. New controls, screenshots, multiplayer and long sessions require
+the dedicated test-world checklist.
 
-Sources: [Windows SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput),
+Sources: [Harmony argument prefixes](https://harmony.pardeike.net/articles/patching-prefix.html),
+[Unity UI events](https://docs.unity3d.com/es/530/ScriptReference/EventSystems.ExecuteEvents.html),
 [Unity screenshot timing](https://docs.unity3d.com/2021.3/Documentation/ScriptReference/ScreenCapture.CaptureScreenshotAsTexture.html),
 [BepInEx plugin guide](https://docs.bepinex.dev/articles/dev_guide/plugin_tutorial/2_plugin_start.html),
-[Valheim compile references](https://github.com/Digitalroot-Valheim/Digitalroot.Valheim.References).
+[Valheim references](https://github.com/Digitalroot-Valheim/Digitalroot.Valheim.References).

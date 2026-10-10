@@ -59,7 +59,7 @@ namespace ValheimCliBridge
                                 else if (request.IsWrite && writes.Count >= 65536) response = Response.Error(request.id, "Write limit reached; restart the bridge before a new session");
                                 else
                                 {
-                                    if ((request.operation == "input" || request.operation == "mouse") && inputEpoch != null) request.controlEpoch = inputEpoch();
+                                    if (request.IsControl && inputEpoch != null) request.controlEpoch = inputEpoch();
                                     if (request.IsWrite) writes.Add(request.id);
                                     response = dispatcher.Run(request);
                                     if (request.IsWrite && response.state == "cancelled") writes.Remove(request.id);

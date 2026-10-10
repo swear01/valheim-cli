@@ -38,9 +38,18 @@ test('Node CLI client talks to production C# transport and dispatcher', async ()
     const uncertain = { ...write, id: randomUUID(), x: -1 };
     await assert.rejects(request(uncertain), /Game operation failed/);
     await assert.rejects(request({ ...uncertain, x: 1 }), /Write ID already used/);
-    const input = { port, token: 'a'.repeat(64), operation: 'input', keys: 'W', durationMs: 200, id: randomUUID() };
+    const input = { port, token: 'a'.repeat(64), operation: 'input', moveZ: 1, durationMs: 200, id: randomUUID() };
     assert.equal((await request(input)).state, 'started');
     await assert.rejects(request(input), /Write ID already used/);
+    for (const action of [
+      { operation: 'look', yaw: 30, pitch: -10 },
+      { operation: 'action', action: 'slot', slot: 1 },
+      { operation: 'ui', uiAction: 'click', pointerX: 0.2, pointerY: 0.4 }
+    ]) {
+      const write = { port, token: 'a'.repeat(64), ...action, id: randomUUID() };
+      assert.equal((await request(write)).state, 'started');
+      await assert.rejects(request(write), /Write ID already used/);
+    }
     assert.equal((await request({ port, token: 'a'.repeat(64), operation: 'stop' })).ok, true);
   } finally {
     if (child.exitCode === null && child.signalCode === null) {
