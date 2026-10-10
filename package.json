@@ -1,0 +1,21 @@
+{
+  "name": "valheim-agent-cli",
+  "version": "0.1.0",
+  "description": "Typed local Valheim CLI with an authenticated BepInEx bridge",
+  "type": "module",
+  "bin": { "valheim": "bin/valheim.js" },
+  "files": ["bin", "src", "bridge-dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:bridge": "dotnet run --project bridge-tests -c Release",
+    "build:bridge": "dotnet build bridge -c Release",
+    "pack:bridge": "node scripts/package-bridge.js",
+    "prepack": "node scripts/check-package.js"
+  },
+  "repository": { "type": "git", "url": "git+https://github.com/swear01/valheim-cli.git" },
+  "homepage": "https://github.com/swear01/valheim-cli#readme",
+  "bugs": { "url": "https://github.com/swear01/valheim-cli/issues" },
+  "author": "Huang Ssu-Wei",
+  "license": "MIT"
+}
