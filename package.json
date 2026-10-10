@@ -1,10 +1,10 @@
 {
   "name": "valheim-agent-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Typed local Valheim CLI with an authenticated BepInEx bridge",
   "type": "module",
   "bin": { "valheim": "bin/valheim.js" },
-  "files": ["bin", "src", "bridge-dist", "README.md", "LICENSE"],
+  "files": ["bin", "src", "bridge-dist", "docs", "README.md", "LICENSE"],
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "node --test test/*.test.js",

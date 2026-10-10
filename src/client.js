@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 
 const maxFrame = 65536;
 
-export function request({ port, token, operation, x, y, z, id = randomUUID() }) {
+export function request({ port, token, operation, x, y, z, actions, moveX, moveZ, durationMs, yaw, pitch, action, slot, uiAction, button, scroll, pointerX, pointerY, id = randomUUID() }) {
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid bridge port');
   if (!/^[a-f0-9]{64}$/.test(token)) throw new Error('Invalid local token');
-  const body = Buffer.from(JSON.stringify({ id, token, operation, ...(x === undefined ? {} : { x, y, z }) }));
+  const body = Buffer.from(JSON.stringify({ id, token, operation, x, y, z, actions, moveX, moveZ, durationMs, yaw, pitch, action, slot, uiAction, button, scroll, pointerX, pointerY }));
+  const maxResponse = operation === 'observe' ? 8 * 1024 * 1024 : maxFrame;
   if (body.length > maxFrame) throw new Error('Request too large');
   const header = Buffer.alloc(4);
   header.writeUInt32BE(body.length);
@@ -23,17 +24,17 @@ export function request({ port, token, operation, x, y, z, id = randomUUID() }) 
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      if (submitted && operation === 'teleport' && !acknowledged) error.message += ' Write outcome unknown; do not automatically retry.';
+      if (submitted && ['teleport', 'input', 'look', 'action', 'ui'].includes(operation) && !acknowledged) error.message += ' Write outcome unknown; do not automatically retry. Use stop/status.';
       reject(error);
     }
     socket.once('connect', () => { submitted = true; socket.write(Buffer.concat([header, body])); });
     socket.on('data', chunk => {
       if (settled) return;
-      if (buffer.length + chunk.length > maxFrame + 4) return fail(new Error('Bridge response too large'));
+      if (buffer.length + chunk.length > maxResponse + 4) return fail(new Error('Bridge response too large'));
       buffer = Buffer.concat([buffer, chunk]);
       if (expected === undefined && buffer.length >= 4) {
         expected = buffer.readUInt32BE();
-        if (expected < 1 || expected > maxFrame) return fail(new Error('Invalid bridge frame'));
+        if (expected < 1 || expected > maxResponse) return fail(new Error('Invalid bridge frame'));
       }
       if (expected !== undefined && buffer.length >= expected + 4) {
         try {

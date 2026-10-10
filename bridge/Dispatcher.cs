@@ -5,6 +5,11 @@ using System.Threading;
 
 namespace ValheimCliBridge
 {
+    public sealed class ActionRefusedException : InvalidOperationException
+    {
+        public ActionRefusedException(string message) : base(message) { }
+    }
+
     public sealed class Dispatcher
     {
         private sealed class Job
@@ -64,6 +69,7 @@ namespace ValheimCliBridge
             }
             Response result;
             try { result = execute(job.Request); }
+            catch (ActionRefusedException error) { result = Response.Error(job.Request.id, error.Message, "cancelled"); }
             catch (Exception error) { result = Response.Error(job.Request.id, "Game operation failed: " + error.GetType().Name); }
             lock (job.Gate) { job.Result = result; Monitor.PulseAll(job.Gate); }
         }
