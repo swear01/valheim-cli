@@ -8,18 +8,20 @@ namespace UnityEngine
     public sealed class Camera { public static Camera main; public Transform transform = new(); }
     public class Texture2D
     {
+        public static bool FailEncode;
         public int width, height;
         public Texture2D(int width, int height, TextureFormat format, bool mipmap) { this.width = width; this.height = height; }
         public void ReadPixels(Rect rect, int x, int y) { }
         public void Apply() { }
-        public byte[] EncodeToPNG() => new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 };
+        public byte[] EncodeToPNG() => FailEncode ? throw new InvalidOperationException("fixture capture failure") : new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 };
     }
     public enum TextureFormat { RGB24 }
     public sealed class RenderTexture
     {
+        public static int Releases;
         public static RenderTexture active;
         public static RenderTexture GetTemporary(int width, int height, int depth) => new();
-        public static void ReleaseTemporary(RenderTexture texture) { }
+        public static void ReleaseTemporary(RenderTexture texture) { Releases++; }
     }
     public static class Graphics { public static void Blit(Texture2D source, RenderTexture target) { } }
     public struct Rect { public Rect(int x, int y, int width, int height) { } }
@@ -41,8 +43,9 @@ namespace BepInEx
     {
         public readonly Configuration.ConfigFile Config = new(); public readonly TestLogger Logger = new();
         public readonly List<System.Collections.IEnumerator> Coroutines = new();
+        public readonly List<object> Destroyed = new();
         public void StartCoroutine(System.Collections.IEnumerator routine) { Coroutines.Add(routine); }
-        public void Destroy(object value) { }
+        public void Destroy(object value) { Destroyed.Add(value); }
     }
     public static class Paths { public static string ConfigPath => Path.GetTempPath(); }
 }

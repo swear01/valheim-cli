@@ -103,6 +103,7 @@ namespace ValheimCliBridge
                 input.Permit(true);
                 try { if (request.operation == "mouse") input.Motion(request); else input.Start(request); }
                 catch (InvalidOperationException error) { return Response.Error(request.id, error.Message, "cancelled"); }
+                catch (IOException) { return Response.Error(request.id, "Input may have started; use stop/status before a new action. Do not retry automatically."); }
                 if (request.operation == "input") controlledPlayer = local;
                 image = null;
                 response.state = request.operation == "mouse" ? "applied" : "started";
@@ -118,7 +119,17 @@ namespace ValheimCliBridge
                     name = item.m_shared.m_name, count = item.m_stack, quality = item.m_quality,
                     column = item.m_gridPos.x, row = item.m_gridPos.y, equipped = item.m_equipped
                 }).ToArray();
-                response.captureError = captureError;
+                if (captureError != null)
+                {
+                    var failure = captureError;
+                    captureError = null;
+                    if (imagePlayer == local)
+                    {
+                        response.captureError = failure;
+                        response.state = "capture_failed";
+                        return response;
+                    }
+                }
                 if (image != null && imagePlayer == local && Time.realtimeSinceStartup - capturedTime < 0.5f)
                 {
                     response.image = image; response.imageWidth = imageWidth; response.imageHeight = imageHeight; response.capturedAt = capturedAt;
@@ -169,7 +180,7 @@ namespace ValheimCliBridge
                 image = Convert.ToBase64String(scaled.EncodeToPNG());
                 imagePlayer = expectedPlayer; capturedTime = Time.realtimeSinceStartup; capturedAt = DateTime.UtcNow.ToString("o"); captureError = null;
             }
-            catch (Exception error) { image = null; captureError = "Screenshot failed: " + error.GetType().Name; }
+            catch (Exception error) { image = null; imagePlayer = expectedPlayer; captureError = "Screenshot failed: " + error.GetType().Name; }
             finally
             {
                 RenderTexture.active = previous;
