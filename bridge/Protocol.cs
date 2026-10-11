@@ -125,6 +125,9 @@ namespace ValheimCliBridge
         [DataMember(EmitDefaultValue = false)] public string inputState;
         [DataMember(EmitDefaultValue = false)] public string inputId;
         [DataMember] public bool foreground;
+        [DataMember] public bool agentMode;
+        [DataMember] public bool paused;
+        [DataMember] public float timeScale;
         [DataMember] public bool dead;
         [DataMember] public float health;
         [DataMember] public float maxHealth;

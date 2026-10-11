@@ -4,8 +4,9 @@ namespace UnityEngine
     public struct Vector3 { public static Vector3 zero => new(); public float x, y, z; public Vector3(float x, float y, float z) { this.x = x; this.y = y; this.z = z; } }
     public struct Quaternion { }
     public sealed class Transform { public Vector3 position, eulerAngles; public Quaternion rotation; }
-    public static class Time { public static float realtimeSinceStartup, time, deltaTime = 0.02f; }
+    public static class Time { public static float timeScale=1, realtimeSinceStartup, time, deltaTime = 0.02f; }
     public struct Vector2 { public float x, y; public Vector2(float x, float y) { this.x=x; this.y=y; } public static Vector2 operator -(Vector2 a, Vector2 b) => new(a.x-b.x,a.y-b.y); }
+    public static class AudioListener { public static float volume=1; }
     public static class Application { public static bool isFocused = true, runInBackground; }
     public enum CursorLockMode { None, Locked, Confined }
     public static class Cursor
@@ -232,3 +233,5 @@ namespace UnityEngine.EventSystems
 }
 
 public static class ZCursor { public static UnityEngine.CursorLockMode LockState { get; set; } private static void SetVisible(bool newVisible) { } }
+
+public static class Game { public static bool Paused; public static bool IsPaused()=>Paused; }

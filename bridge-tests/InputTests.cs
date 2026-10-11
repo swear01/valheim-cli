@@ -49,6 +49,7 @@ static class InputTests
         var flags=System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance;
         var originalPath=BepInEx.Paths.ConfigPath;
         var originalBackground=Application.runInBackground;
+        var originalVolume=AudioListener.volume;
         var folder=Path.Combine(Path.GetTempPath(),"valheim-background-"+Guid.NewGuid());
         Directory.CreateDirectory(folder);BepInEx.Paths.ConfigPath=folder;
         try
@@ -62,11 +63,15 @@ static class InputTests
                     typeof(Plugin).GetMethod("Awake",flags).Invoke(plugin,null);
                     Assert(Plugin.Instance==plugin && Application.runInBackground,"Bridge did not enable background execution");
                 }
-                finally {typeof(Plugin).GetMethod("OnDestroy",flags).Invoke(plugin,null);}
+                finally {
+                    typeof(Plugin).GetField("previousVolume",flags).SetValue(plugin,(float?)0.7f);AudioListener.volume=0;
+                    typeof(Plugin).GetMethod("OnDestroy",flags).Invoke(plugin,null);
+                }
+                Assert(AudioListener.volume==0.7f,"Bridge did not restore audio volume on unload");
                 Assert(Application.runInBackground==background,"Bridge did not restore background execution on unload");
             }
         }
-        finally {Application.runInBackground=originalBackground;BepInEx.Paths.ConfigPath=originalPath;Directory.Delete(folder,true);}
+        finally {AudioListener.volume=originalVolume;Application.runInBackground=originalBackground;BepInEx.Paths.ConfigPath=originalPath;Directory.Delete(folder,true);}
     }
     static void CheckEmergencyTransport()
     {
@@ -176,6 +181,15 @@ static class InputTests
         Application.isFocused=false;Plugin.Instance=null;
         BackgroundCursor.SetLockState(CursorLockMode.Locked);BackgroundCursor.SetVisible(false);
         Assert(UnityEngine.Cursor.lockState==CursorLockMode.Locked && !UnityEngine.Cursor.visible,"Disabled bridge changed cursor behavior");Plugin.Instance=plugin;Application.isFocused=true;
+        typeof(Plugin).GetProperty("AgentMode",flags).SetValue(plugin,true);
+        AudioListener.volume=0.8f; Application.runInBackground=false;
+        typeof(Plugin).GetMethod("LateUpdate",flags).Invoke(plugin,null);
+        Assert(AudioListener.volume==0 && Application.runInBackground,"Scene settings defeated agent background/audio policy"); AudioListener.volume=1;
+        BackgroundCursor.SetLockState(CursorLockMode.Locked); BackgroundCursor.SetVisible(false);
+        Assert(UnityEngine.Cursor.lockState==CursorLockMode.None && UnityEngine.Cursor.visible,"Agent mode captured cursor despite Unity focus");
+        Game.Paused=true; var pausedStatus=Execute(new Request{operation="status"});
+        Assert(pausedStatus.agentMode && pausedStatus.paused,"Agent mode pause state was not reported"); Game.Paused=false;
+        typeof(Plugin).GetProperty("AgentMode",flags).SetValue(plugin,false);
         Execute(new Request{operation="action",action="slot",slot=1});Assert(Player.m_localPlayer.Hotbar==1,"Hotbar did not use game method");
         Execute(new Request{operation="action",action="interact"});Assert(Player.m_localPlayer.Interactions==1,"Interact did not use game method");
         Player.m_localPlayer.NativeInputAllowed=false;

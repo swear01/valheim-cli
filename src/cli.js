@@ -4,8 +4,10 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { request } from './client.js';
+import { launchAgent } from './agent-launch.js';
 
-export const help = `valheim install --profile <Gale profile folder>
+export const help = `valheim launch-agent --profile <folder> --game <path/to/valheim.exe> --confirm
+valheim install --profile <Gale profile folder>
 valheim status --profile <folder> [--port 28761]
 valheim players --profile <folder>
 valheim observe --profile <folder> [--image <new.png>]
@@ -118,18 +120,19 @@ export async function install(profile, artifactRoot = fileURLToPath(new URL('../
 export async function main(args) {
   if (args.length === 0 || args.length === 1 && ['--help', 'help'].includes(args[0])) return { ok: true, help };
   const command = args.shift();
-  if (!['install', 'status', 'players', 'teleport', 'observe', 'stop', 'console', ...controlCommands].includes(command)) throw new Error('Unknown command. Run valheim --help');
+  if (!['launch-agent', 'install', 'status', 'players', 'teleport', 'observe', 'stop', 'console', ...controlCommands].includes(command)) throw new Error('Unknown command. Run valheim --help');
   const values = [];
   let profile;
   let port = 28761;
   let confirm = false;
   let id;
   let imagePath;
+  let game;
   const input = {};
   const seen = new Set();
   while (args.length) {
     const value = args.shift();
-    if (['--profile', '--port', '--confirm', '--request-id', '--image', ...Object.keys(inputOptions)].includes(value)) {
+    if (['--profile', '--port', '--confirm', '--request-id', '--image', '--game', ...Object.keys(inputOptions)].includes(value)) {
       if (seen.has(value)) throw new Error(`Duplicate option: ${value}`);
       seen.add(value);
       if (value === '--confirm') { confirm = true; continue; }
@@ -137,6 +140,7 @@ export async function main(args) {
       if (!next || next.startsWith('--')) throw new Error(`Missing value for ${value}`);
       if (value === '--profile') profile = resolve(next);
       else if (value === '--image') imagePath = resolve(next);
+      else if (value === '--game') game = resolve(next);
       else if (value in inputOptions) {
         const field = inputOptions[value];
         if (stringFields.has(field)) input[field] = next;
@@ -157,6 +161,11 @@ export async function main(args) {
     else values.push(value);
   }
   if (!profile) throw new Error('--profile is required');
+  if (command === 'launch-agent') {
+    if (!confirm || !game || values.length || [...seen].some(option => !['--profile', '--game', '--confirm'].includes(option))) throw new Error('launch-agent requires only --profile, --game and --confirm');
+    return launchAgent(profile, game);
+  }
+  if (game) throw new Error('--game only applies to launch-agent');
   if (!['teleport', 'console', ...controlCommands].includes(command) && (values.length || confirm || id)) throw new Error('Unexpected arguments');
   if (!controlCommands.includes(command) && command !== 'console' && Object.keys(input).length || command !== 'observe' && imagePath) throw new Error('Unexpected arguments');
   if (controlCommands.includes(command)) {

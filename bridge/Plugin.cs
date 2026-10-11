@@ -9,7 +9,7 @@ using HarmonyLib;
 
 namespace ValheimCliBridge
 {
-    [BepInPlugin("swear01.ValheimCliBridge", "Valheim CLI Bridge", "0.2.0")]
+    [BepInPlugin("swear01.ValheimCliBridge", "Valheim CLI Bridge", "0.4.0")]
     public sealed class Plugin : BaseUnityPlugin
     {
         private Dispatcher dispatcher;
@@ -21,6 +21,8 @@ namespace ValheimCliBridge
         private Harmony harmony;
         private bool controlReady, appliedControl;
         private bool? previousBackground;
+        private float? previousVolume;
+        internal bool AgentMode { get; private set; }
         private InputController input;
         private Player controlledPlayer;
         private bool capturing;
@@ -36,6 +38,7 @@ namespace ValheimCliBridge
             allowControl = Config.Bind("Permissions", "AllowControl", false, "Allow bounded game-internal actions for your local character, including joining clients. Works while the game is unfocused. F12 in the game revokes permission. Never enable while someone else is playing this character.");
             allowConsole = Config.Bind("Permissions", "AllowConsole", false, "Allow direct native console commands, including mod commands. Works while unfocused; requires an enabled game console. Native command permissions still apply. F12 in the game revokes this permission.");
             if (!enabled.Value) return;
+            AgentMode = Environment.GetCommandLineArgs().Contains("--valheim-cli-agent");
             try
             {
                 var tokenPath = Path.Combine(Paths.ConfigPath, "swear01.ValheimCliBridge.token");
@@ -55,6 +58,7 @@ namespace ValheimCliBridge
                 controlReady = true;
                 previousBackground = Application.runInBackground;
                 Application.runInBackground = true;
+                if (AgentMode) { previousVolume = AudioListener.volume; AudioListener.volume = 0; }
                 server = new Server(port.Value, token, dispatcher, error => Logger.LogError("CLI bridge connection failed: " + error.GetType().Name), StopInput, () => input.Epoch);
                 Logger.LogInfo("CLI bridge listening on 127.0.0.1:" + port.Value + "; token stored in local config folder. Never share it.");
             }
@@ -62,6 +66,7 @@ namespace ValheimCliBridge
             {
                 controlReady = false;
                 if (previousBackground.HasValue) Application.runInBackground = previousBackground.Value;
+                if (previousVolume.HasValue) AudioListener.volume = previousVolume.Value;
                 Instance = null;
                 harmony?.UnpatchSelf();
                 input?.Dispose();
@@ -104,6 +109,12 @@ namespace ValheimCliBridge
             input?.Permit(CanControl(Player.m_localPlayer));
             dispatcher?.Pump();
         }
+        private void LateUpdate()
+        {
+            if (Instance != this || !AgentMode) return;
+            if (!Application.runInBackground) Application.runInBackground = true;
+            if (AudioListener.volume != 0) AudioListener.volume = 0;
+        }
         private void OnApplicationFocus(bool focused)
         {
             if (focused || Instance != this) return;
@@ -114,6 +125,7 @@ namespace ValheimCliBridge
         {
             controlReady = false;
             if (previousBackground.HasValue) Application.runInBackground = previousBackground.Value;
+            if (previousVolume.HasValue) AudioListener.volume = previousVolume.Value;
             input?.Dispose();
             server?.Dispose();
             if (appliedControl && controlledPlayer != null && controlledPlayer == Player.m_localPlayer)
@@ -132,7 +144,7 @@ namespace ValheimCliBridge
             var net = ZNet.instance;
             var response = new Response
             {
-                id = request.id, ok = true, state = "observed", version = "0.2.0",
+                id = request.id, ok = true, state = "observed", version = "0.4.0",
                 inWorld = local != null && net != null,
                 host = net != null && net.IsServer(),
                 teleportAllowed = net != null && net.IsServer() && allowTeleport.Value,
@@ -140,7 +152,7 @@ namespace ValheimCliBridge
                 player = local != null ? local.GetPlayerName() : null,
                 position = local != null ? PositionOf(local.transform.position) : null,
                 teleporting = local != null && local.IsTeleporting(),
-                consoleAllowed = CanConsole, controlAllowed = CanControl(local), foreground = Application.isFocused,
+                consoleAllowed = CanConsole, controlAllowed = CanControl(local), foreground = Application.isFocused, agentMode = AgentMode, paused = local != null && ZNet.instance != null && Game.IsPaused(), timeScale = Time.timeScale,
                 inputActive = input != null && input.Active, inputState = input?.Reason, inputId = input?.Id,
                 dead = local != null && local.IsDead(),
                 health = local != null ? local.GetHealth() : 0, maxHealth = local != null ? local.GetMaxHealth() : 0,

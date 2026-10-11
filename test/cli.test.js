@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { main, install } from '../src/cli.js';
 
 test('CLI rejects unsafe or ambiguous inputs before connecting', async () => {
-  for (const args of [ ['spawn'], ['teleport', '0', '2', '3', '--profile', '.'],
+  for (const args of [ ['spawn'], ['launch-agent', '--profile', '.', '--confirm'], ['launch-agent', '--profile', '.', '--game', 'valheim.exe'], ['status', '--profile', '.', '--game', 'valheim.exe'], ['launch-agent', '--profile', '.', '--game', 'valheim.exe', '--port', '28761', '--confirm'], ['teleport', '0', '2', '3', '--profile', '.'],
     ['teleport', '0;spawn', '2', '3', '--profile', '.', '--confirm'],
     ['teleport', 'NaN', '2', '3', '--profile', '.', '--confirm'],
     ['teleport', '0', '999999', '3', '--profile', '.', '--confirm'],

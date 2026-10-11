@@ -17,11 +17,11 @@ Install Node.js 22+ on the same computer as Valheim. Download the experimental C
 tarball when provided, then install it:
 
 ```sh
-npm install -g ./valheim-agent-cli-0.2.0.tgz
+npm install -g ./valheim-agent-cli-0.4.0.tgz
 valheim install --profile "C:\path\to\Gale\profile"
 ```
 
-0.2.0 is not published to npm or Thunderstore. Exit Valheim before upgrading.
+0.4.0 is not published to npm or Thunderstore. Exit Valheim before upgrading.
 The installer checks the bundled DLL hash and preserves other mods/settings. It
 refuses to overwrite a different DLL: back up/remove only that bridge first.
 For Thunderstore installation, use the mod manager instead of installing a second
@@ -247,3 +247,35 @@ Sources: [Harmony argument prefixes](https://harmony.pardeike.net/articles/patch
 [Unity screenshot timing](https://docs.unity3d.com/2021.3/Documentation/ScriptReference/ScreenCapture.CaptureScreenshotAsTexture.html),
 [BepInEx plugin guide](https://docs.bepinex.dev/articles/dev_guide/plugin_tutorial/2_plugin_start.html),
 [Valheim references](https://github.com/Digitalroot-Valheim/Digitalroot.Valheim.References).
+
+## Windows Agent mode
+
+Use a separate character and world for unattended testing. After installing this
+CLI's bridge and enabling `AllowControl` in a normal launch, exit Valheim:
+
+```powershell
+valheim launch-agent --profile "C:\path\to\Gale\profile" --game "E:\SteamLibrary\steamapps\common\Valheim\valheim.exe" --confirm
+valheim status --profile "C:\path\to\Gale\profile"
+valheim ui-list --profile "C:\path\to\Gale\profile"
+```
+
+Run this command in your signed-in Windows desktop session. It refuses an existing
+Valheim process, verifies the installed bridge hash, and starts the client on a
+new Win32 desktop without switching your input desktop. The rendered GUI is
+available through `observe` and native UI commands, but is absent from your normal
+Alt+Tab list. Exit through the native Quit button after saving/logging out.
+`launched` means process creation succeeded; poll `status` for readiness.
+
+The launcher passes `--valheim-cli-agent`. This makes cursor locking/hiding stay
+suppressed even when Unity reports focus within its isolated desktop, silences
+game audio while the bridge is loaded, and retains background execution. It does
+not grant action or Console permissions. `foreground` reports **Unity focus**, not
+whether the game is on your visible Windows desktop. `agentMode`, `paused` and
+`timeScale` report the bridge mode and native simulation state. Manual menus and
+cinematics retain their native pause behavior; no automatic unpause is injected.
+
+The GUI renderer and GPU remain active. This is not a headless dedicated server.
+Ordinary launching can still take foreground before the plugin loads; use this
+launcher for desktop isolation. The launcher uses Windows desktop/process APIs;
+gameplay, Console and UI actions continue to use game methods without simulated
+OS keyboard or mouse input. Multiplayer and long sessions remain unverified.
