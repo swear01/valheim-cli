@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, rename, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, rename, realpath, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -52,6 +52,14 @@ test('Standalone and manager plugin layouts reuse one verified bridge and refuse
     assert.equal((await install(profile, artifact)).path, current);
     const linkedDll = join(external, 'ValheimCliBridge.dll');
     await rename(current, linkedDll);
+    if (process.platform !== 'win32' && process.getuid() !== 0) {
+      await chmod(external, 0);
+      try {
+        await assert.rejects(install(profile, artifact), { code: 'EACCES' });
+        await assert.rejects(installedBridge(profile, hash), { code: 'EACCES' });
+      } finally { await chmod(external, 0o700); }
+      await assert.rejects(readFile(join(plugins, 'swear01-ValheimCliBridge', 'ValheimCliBridge.dll')), { code: 'ENOENT' });
+    }
     assert.equal((await install(profile, artifact)).path, join(link, 'ValheimCliBridge.dll'));
     await rename(linkedDll, current);
     await writeFile(linkedDll, dll);

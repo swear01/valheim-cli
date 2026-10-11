@@ -12,6 +12,7 @@ export async function installedBridge(profile, expected) {
   }
   const found = [];
   async function scan(folder, parents = new Set()) {
+    // An incomplete scan must fail: skipping unreadable folders can install a duplicate.
     const resolved = await realpath(folder);
     if (parents.has(resolved)) return;
     const ancestors = new Set([...parents, resolved]);

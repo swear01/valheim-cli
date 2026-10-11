@@ -37,6 +37,9 @@ subfolders. A matching existing copy is reused; duplicate or different-version
 copies are refused. Linked plugin subdirectories are scanned read-only, with cycles
 skipped. A linked `BepInEx`/`plugins` root or bridge DLL is refused; installation
 never writes through a linked directory.
+Unreadable plugin directories abort installation/launch preflight: skipping them
+could hide an existing bridge and create a duplicate. Fix directory permissions
+before retrying.
 The CLI does not install BepInEx or convert an unmodded game automatically.
 
 0.4.0 is not published to npm or Thunderstore. Exit Valheim before upgrading.
