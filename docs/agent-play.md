@@ -4,6 +4,14 @@ Use a shell-capable, image-capable agent on the game computer. The mod supplies
 state, screenshots and game-internal actions; the agent supplies decisions.
 No AI subscription, model key or endpoint is configured by the mod.
 
+The integration is independent of modpacks and mod managers. Obtain the path
+to the installation root containing `BepInEx`: the game folder for a manual
+installation, or the selected manager profile root. Use it as `--profile` on
+each command. Run `valheim --help` for commands, then `status` to verify the
+bridge/version/permissions and `ui-list` or `observe` for current UI state.
+The token is read from that root's `BepInEx/config`; do not copy it into agent
+instructions. There is no automatic installation discovery or MCP registration.
+
 ## Recommended instructions for the agent
 
 > Control only my local character through `valheim`, using my profile folder.

@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { request } from './client.js';
 import { launchAgent } from './agent-launch.js';
+import { installedBridge } from './bridge-path.js';
 
 export const help = `valheim launch-agent --profile <folder> --game <path/to/valheim.exe> --confirm
-valheim install --profile <Gale profile folder>
+valheim install --profile <BepInEx installation root>
 valheim status --profile <folder> [--port 28761]
 valheim players --profile <folder>
 valheim observe --profile <folder> [--image <new.png>]
@@ -30,7 +31,8 @@ Look takes degree deltas: positive yaw turns right, positive pitch looks down.
 UI IDs expire after 30 seconds, any UI action or another ui-list. Re-list before each action.
 Buttons use their native submit/click handlers, including startup menus and mod UI.
 Teleport coordinates are world X, Y (height), Z; requires host + AllowTeleport=true.
-All results are JSON. No automatic write retries.`;
+All results are JSON. No automatic write retries.
+--profile is the folder containing BepInEx, such as the game folder or a mod-manager profile. No mod manager or modpack is required.`;
 
 const inputOptions = { '--actions': 'actions', '--move-x': 'moveX', '--move-z': 'moveZ', '--ms': 'durationMs', '--yaw': 'yaw', '--pitch': 'pitch', '--action': 'action', '--slot': 'slot', '--ui-action': 'uiAction', '--button': 'button', '--scroll': 'scroll', '--target': 'target', '--offset': 'offset', '--command': 'command' };
 const controlCommands = ['input', 'look', 'action', 'ui'];
@@ -103,9 +105,12 @@ export async function install(profile, artifactRoot = fileURLToPath(new URL('../
   const expected = manifest.sha256;
   if (!/^[a-f0-9]{64}$/.test(expected)) throw new Error('Invalid bridge manifest');
   if (createHash('sha256').update(await readFile(source)).digest('hex') !== expected) throw new Error('Bridge checksum mismatch');
-  const targetDir = join(plugins, 'swear01-ValheimCliBridge');
   await safeDirectory(join(profile, 'BepInEx'));
   await safeDirectory(plugins);
+  const existing = await installedBridge(profile, expected);
+  if (existing) return { ok: true, state: 'installed', path: existing, version: manifest.version,
+    next: 'Restart Valheim. The plugin creates its local token; teleport is disabled by default.' };
+  const targetDir = join(plugins, 'swear01-ValheimCliBridge');
   await safeDirectory(targetDir);
   const target = join(targetDir, 'ValheimCliBridge.dll');
   try {
