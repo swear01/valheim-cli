@@ -56,6 +56,10 @@ test('Node CLI client talks to production C# transport and dispatcher', async ()
       assert.equal((await request(write)).state, 'started');
       await assert.rejects(request(write), /Write ID already used/);
     }
+    const consoleWrite = { port, token: 'a'.repeat(64), operation: 'console', command: 'help 2 4', id: randomUUID() };
+    assert.equal((await request(consoleWrite)).state, 'started');
+    await assert.rejects(request(consoleWrite), /Write ID already used/);
+    await assert.rejects(request({ ...consoleWrite, id: randomUUID(), token: 'b'.repeat(64) }), /Unauthorized/);
     assert.equal((await request({ port, token: 'a'.repeat(64), operation: 'stop' })).ok, true);
   } finally {
     if (child.exitCode === null && child.signalCode === null) {

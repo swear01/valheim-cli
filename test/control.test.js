@@ -115,3 +115,33 @@ test('Large screenshots are accepted only for observe, and lost input acknowledg
     await assert.rejects(request({ port: server.address().port, token: 'a'.repeat(64), operation: 'input', moveZ: 1, durationMs: 200 }), /outcome unknown.*stop\/status/);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+
+test('Native console CLI preserves command arguments and rejects ambiguous requests', async () => {
+  for (const command of ['', ' help', 'help ', 'help\ninfo', 'help\tinfo', 'x'.repeat(513)]) {
+    await assert.rejects(main(['console', '--profile', '.', '--command', command, '--confirm']));
+  }
+  for (const args of [[], ['--command', 'help'], ['--command', 'help', '--confirm', '--yaw', '1'], ['help', '--command', 'help', '--confirm']]) {
+    await assert.rejects(main(['console', '--profile', '.', ...args]));
+  }
+  await assert.rejects(main(['status', '--profile', '.', '--command', 'help']));
+  const root = await mkdtemp(join(tmpdir(), 'valheim-console-'));
+  try {
+    await mkdir(join(root, 'BepInEx', 'config'), { recursive: true });
+    await writeFile(join(root, 'BepInEx', 'config', 'swear01.ValheimCliBridge.token'), 'a'.repeat(64));
+    await fixture(value => {
+      assert.equal(value.operation, 'console');
+      assert.equal(value.command, 'mod_example "two words" -1');
+      return { state: 'submitted', consoleOutput: ['native output'] };
+    }, async port => {
+      const result = await main(['console', '--profile', root, '--port', String(port), '--command', 'mod_example "two words" -1', '--confirm']);
+      assert.equal(result.state, 'submitted');
+      assert.deepEqual(result.consoleOutput, ['native output']);
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+  const server = createServer(socket => socket.once('data', () => socket.resetAndDestroy()));
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  try {
+    await assert.rejects(request({ port: server.address().port, token: 'a'.repeat(64), operation: 'console', command: 'help' }), /outcome unknown/);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});

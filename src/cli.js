@@ -17,10 +17,12 @@ valheim action --profile <folder> --confirm --action menu|interact|slot|inventor
 valheim ui-list --profile <folder> [--offset 0]
 valheim ui --profile <folder> --confirm --ui-action click|scroll
   --target <ID from ui-list> [--button left|right|middle] [--scroll -10..10]
+valheim console --profile <folder> --command "help" --confirm
 valheim stop --profile <folder>
 valheim teleport <x> <y> <z> --profile <folder> --confirm [--request-id <UUID>]
-Game-internal controls only. No OS keyboard/mouse injection or console execution.
-Input requires AllowControl=true + focused game. F12 revokes control.
+Game-internal controls only. No OS keyboard/mouse injection. Console calls native TryRunCommand without typing.
+Input requires AllowControl=true; background operation is supported. F12 in the game revokes control and console access.
+Console requires AllowConsole=true + enabled game console; native restrictions apply.
 Movement is relative to player look. Input lasts 50..5000 ms; poll status and observe.
 Look takes degree deltas: positive yaw turns right, positive pitch looks down.
 UI IDs expire after 30 seconds, any UI action or another ui-list. Re-list before each action.
@@ -28,9 +30,9 @@ Buttons use their native submit/click handlers, including startup menus and mod 
 Teleport coordinates are world X, Y (height), Z; requires host + AllowTeleport=true.
 All results are JSON. No automatic write retries.`;
 
-const inputOptions = { '--actions': 'actions', '--move-x': 'moveX', '--move-z': 'moveZ', '--ms': 'durationMs', '--yaw': 'yaw', '--pitch': 'pitch', '--action': 'action', '--slot': 'slot', '--ui-action': 'uiAction', '--button': 'button', '--scroll': 'scroll', '--target': 'target', '--offset': 'offset' };
+const inputOptions = { '--actions': 'actions', '--move-x': 'moveX', '--move-z': 'moveZ', '--ms': 'durationMs', '--yaw': 'yaw', '--pitch': 'pitch', '--action': 'action', '--slot': 'slot', '--ui-action': 'uiAction', '--button': 'button', '--scroll': 'scroll', '--target': 'target', '--offset': 'offset', '--command': 'command' };
 const controlCommands = ['input', 'look', 'action', 'ui'];
-const stringFields = new Set(['actions', 'action', 'uiAction', 'button', 'target']);
+const stringFields = new Set(['actions', 'action', 'uiAction', 'button', 'target', 'command']);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 export function validateInput(input, operation = 'input') {
@@ -120,7 +122,7 @@ export async function install(profile, artifactRoot = fileURLToPath(new URL('../
 export async function main(args) {
   if (args.length === 0 || args.length === 1 && ['--help', 'help'].includes(args[0])) return { ok: true, help };
   const command = args.shift();
-  if (!['install', 'status', 'players', 'teleport', 'observe', 'stop', 'ui-list', ...controlCommands].includes(command)) throw new Error('Unknown command. Run valheim --help');
+  if (!['install', 'status', 'players', 'teleport', 'observe', 'stop', 'ui-list', 'console', ...controlCommands].includes(command)) throw new Error('Unknown command. Run valheim --help');
   const values = [];
   let profile;
   let port = 28761;
@@ -159,14 +161,20 @@ export async function main(args) {
     else values.push(value);
   }
   if (!profile) throw new Error('--profile is required');
-  if (!['teleport', ...controlCommands].includes(command) && (values.length || confirm || id)) throw new Error('Unexpected arguments');
-  if (!controlCommands.includes(command) && command !== 'ui-list' && Object.keys(input).length || command !== 'observe' && imagePath) throw new Error('Unexpected arguments');
+  if (!['teleport', 'console', ...controlCommands].includes(command) && (values.length || confirm || id)) throw new Error('Unexpected arguments');
+  if (!controlCommands.includes(command) && command !== 'ui-list' && command !== 'console' && Object.keys(input).length || command !== 'observe' && imagePath) throw new Error('Unexpected arguments');
   if (controlCommands.includes(command)) {
     if (values.length || !confirm) throw new Error('Control commands require --confirm and named options');
     if (command === 'input') input.durationMs ??= 200;
     validateInput(input, command);
   }
   if (command === 'ui-list') validateInput(input, command);
+  if (command === 'console') {
+    if (values.length || !confirm || Object.keys(input).length !== 1 || typeof input.command !== 'string' ||
+      !input.command.trim() || input.command !== input.command.trim() || input.command.length > 512 || /[\u0000-\u001f\u007f-\u009f]/u.test(input.command)) {
+      throw new Error('console requires --confirm and --command with one trimmed line of 1..512 characters without control characters');
+    }
+  }
   if (command === 'install') {
     if (seen.has('--port')) throw new Error('Configure the port in the plugin config after first launch');
     return install(profile);

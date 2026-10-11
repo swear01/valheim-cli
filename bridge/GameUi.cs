@@ -31,7 +31,7 @@ namespace ValheimCliBridge
             response.uiNextOffset = offset + 64 < objects.Length ? (int?)(offset + 64) : null;
             response.ui = objects.Skip(offset).Take(64).Select(o =>
             {
-                var description = Describe(o);
+                var description = Describe(o, out _, out _);
                 description.id = Guid.NewGuid().ToString();
                 targets.Add(description.id, new Target { Object = o, Description = description });
                 return description;
@@ -39,7 +39,7 @@ namespace ValheimCliBridge
             listedAt = Time.realtimeSinceStartup;
         }
         private static bool Supported(MonoBehaviour c) => c is Button || c is Toggle || !(c is Selectable) && (c is IPointerClickHandler || c is ISubmitHandler || c is IScrollHandler);
-        private static UiControl Describe(GameObject o)
+        private static UiControl Describe(GameObject o, out Vector2 point, out RaycastResult hit)
         {
             var components = o.GetComponents<MonoBehaviour>().Where(c => c != null && c.isActiveAndEnabled).ToArray();
             var selectable = o.GetComponent<Selectable>();
@@ -53,7 +53,7 @@ namespace ValheimCliBridge
                 .Where(c => c != null && c.isActiveAndEnabled && (c is Text || c.GetType().FullName == "TMPro.TextMeshProUGUI"))
                 .Select(c => c is Text text ? text.text : c.GetType().GetProperty("text")?.GetValue(c, null) as string)
                 .Where(s => !string.IsNullOrWhiteSpace(s)).Take(8));
-            var visible = AvailablePoint(o, out _, out _);
+            var visible = AvailablePoint(o, out point, out hit);
             var enabled = selectable == null || selectable.IsInteractable();
             return new UiControl
             {
@@ -73,7 +73,8 @@ namespace ValheimCliBridge
             if (system == null || rect == null || canvas == null || !canvas.isActiveAndEnabled || !target.activeInHierarchy || target.GetComponentsInParent<CanvasGroup>().Any(g => g.alpha <= 0.01f)) return false;
             var corners = new Vector3[4];
             rect.GetWorldCorners(corners);
-            var camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+            var camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay || canvas.renderMode == RenderMode.ScreenSpaceCamera && canvas.worldCamera == null
+                ? null : canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
             var lo = RectTransformUtility.WorldToScreenPoint(camera, corners[0]);
             var hi = RectTransformUtility.WorldToScreenPoint(camera, corners[2]);
             foreach (var fraction in new[] { new Vector2(.5f, .5f), new Vector2(.1f, .1f), new Vector2(.9f, .1f), new Vector2(.1f, .9f), new Vector2(.9f, .9f) })
@@ -94,8 +95,8 @@ namespace ValheimCliBridge
         {
             if (!targets.TryGetValue(r.target, out var target) || target.Object == null || Time.realtimeSinceStartup - listedAt > 30)
                 throw new ActionRefusedException("Unknown or expired UI target; run ui-list again");
-            var current = Describe(target.Object);
-            if (current.path != target.Description.path || current.label != target.Description.label || current.type != target.Description.type || !current.interactable || !current.actions.Contains(r.uiAction) || !AvailablePoint(target.Object, out var point, out var hit))
+            var current = Describe(target.Object, out var point, out var hit);
+            if (current.path != target.Description.path || current.label != target.Description.label || current.type != target.Description.type || !current.interactable || !current.actions.Contains(r.uiAction))
                 throw new ActionRefusedException("UI target changed, disabled or obstructed; run ui-list again");
             var system = EventSystem.current;
             var data = new PointerEventData(system)

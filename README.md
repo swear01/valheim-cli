@@ -2,7 +2,7 @@
 
 A local CLI and BepInEx bridge for an agent controlling **your own character**.
 The agent reads JSON state and game screenshots, then requests game actions.
-Controls run inside Valheim; no OS keyboard/mouse events, shell/console execution,
+Controls and console commands run inside Valheim; no OS keyboard/mouse events, shell execution,
 LLM, autonomous bot or ValheimMCP dependency is bundled.
 
 **0.3.0 is experimental.** It adds discoverable UI targets and menu control.
@@ -48,18 +48,23 @@ AllowControl = true
 AllowTeleport = false
 ```
 
-Control requires ownership of the local, living character, a focused game and no
+Control requires ownership of the local, living character and no
 system menu, chat, console, text input, cutscene or teleport. It works for the host
 or a joining player without OP. Movement/combat/look are blocked while inventory,
 map, store, build selector or other blocking UI is open. UI activation also works
-in startup and pause menus; `uiAllowed` reports its separate permission gate. Settings permission changes apply on the
-next game update; Enabled / Port changes need a restart. Keep the game focused
-and do not control the same character concurrently.
+in startup and pause menus; `uiAllowed` reports its separate permission gate.
+Settings permission changes apply on the next game update; Enabled / Port changes
+need a restart. The bridge enables Unity background execution while loaded.
+Commands do not activate the game window or move the OS pointer. While unfocused,
+native cursor locking/hiding is suppressed; foreground cursor behavior remains
+native. Do not control the same character concurrently.
 
-**F12 cancels actions and revokes AllowControl.** Re-enable it manually to resume.
+**F12 while the game is focused cancels actions and revokes AllowControl and AllowConsole.**
+Re-enable permissions manually to resume.
 `valheim stop` cancels the managed control lease without revoking permission. It
 is authenticated, bypasses Unity's request queue, and requires neither permission
-nor a host role. The next game control tick receives a neutral frame, then normal
+nor a host role or game focus. The next game control tick receives a neutral
+frame, then normal
 human input resumes. The independent 20 ms watchdog expires leases even when the
 main thread stalls, but game state cannot update until that thread resumes.
 
@@ -82,7 +87,9 @@ currently loaded player objects, not the complete remote server roster.
 
 `observe` adds item name tokens, stacks, quality, equipped state, zero-based grid
 positions and a game-only screenshot captured after rendering. Images fit within
-1280×720 while retaining aspect ratio. `capturedAt` is the image's UTC capture
+1280×720 while retaining aspect ratio. A minimized window may stop rendering;
+background execution does not guarantee screenshots while minimized.
+`capturedAt` is the image's UTC capture
 time; state is queried separately. Images may be reused for at most 500 ms and
 are invalidated by actions/teleport. The CLI polls pending screenshot reads, never
 writes. `--image` saves a new PNG without overwriting files. JSON contains its
@@ -131,7 +138,8 @@ looks down. Scroll/rotation accepts nonzero integers within ±10.
 Run `ui-list` to get labels, hierarchy paths, component types, supported actions
 and interactable/reason fields. This read works before character/world selection
 and does not require AllowControl. Use a returned ID with `ui --target <id>`;
-activation requires AllowControl, focus and ownership in a world, or startup UI.
+activation requires AllowControl and ownership in a world, or startup UI.
+Both discovery and activation work while the game is unfocused.
 It also works in the pause menu. Movement remains blocked by menus.
 
 IDs belong to the latest page, expire after 30 seconds and are consumed by any
@@ -175,6 +183,38 @@ Inventory/workbench/build UIs provide equipment, food, crafting and construction
 There is no autonomous navigation, combat AI, semantic craft planner or proof that
 an agent can complete a playthrough. See [the agent guide](docs/agent-play.md) for
 an operating loop and pending live acceptance checks.
+
+## Native console
+
+```sh
+valheim console --profile <folder> --command "help 2 4" --confirm
+```
+
+Enable `AllowConsole = true` separately in the bridge's Permissions settings and
+bring Valheim to the foreground. The game console must already be enabled (for
+example by launching with `-console`). The bridge does not open the console UI,
+change its input field or enable cheats/admin permissions.
+
+The request runs `Console.instance.TryRunCommand(command, false, false)` on the
+Unity main thread, using the native registry/parser, context checks and mod patches.
+Commands registered by mods use the same entry point; mods watching only input-field
+submission need their own integration. The command must be a single trimmed line
+of 1–512 characters with no control characters; native argument parsing is preserved.
+
+The JSON result's `state: "submitted"` means the native parser returned, not that
+the requested effect succeeded. `consoleOutput` contains only synchronous output
+written to that console during the call, including native unknown-command or
+permission messages. Output is capped at 32 entries of 256 characters each;
+`consoleOutputTruncated` reports clipping. Delayed/server replies and logs written
+to other destinations are not captured. Verify consequential results with state
+or observation. Exceptions/timeouts have uncertain outcomes and must not be retried
+automatically; write UUIDs use the existing replay protection.
+
+`AllowConsole` grants access to all commands normally available to that local
+console, including mod commands and native teleport commands. `AllowTeleport`
+only restricts the separate typed teleport API. Native command permissions still
+apply, but mod code can define its own permissions and side effects. F12 revokes
+console permission; `stop` cancels movement, not an executing console command.
 
 ## Teleport
 
@@ -220,7 +260,7 @@ npm pack
 
 CI runs on Windows/Linux. Tests cover the production protocol, dispatcher, replay
 protection, Node-to-C# TCP, lease expiry, edge/hold actions, hook arguments, local
-ownership, focus/UI guards, stop epochs, game-action calls, UI events and screenshot
+ownership, background/UI guards, stop epochs, game-action calls, UI events and screenshot
 cleanup. Game/UI/Harmony fixtures do not execute real runtime patches or render
 real pixels. UI discovery/menu activation, multiplayer and long sessions require
 the dedicated test-world checklist.

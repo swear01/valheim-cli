@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Collections.Generic;
 using System.Xml;
+using System.Linq;
 
 namespace ValheimCliBridge
 {
@@ -20,6 +21,7 @@ namespace ValheimCliBridge
         [DataMember(EmitDefaultValue = false)] public double? x;
         [DataMember(EmitDefaultValue = false)] public double? y;
         [DataMember(EmitDefaultValue = false)] public double? z;
+        [DataMember(EmitDefaultValue = false)] public string command;
         [DataMember(EmitDefaultValue = false)] public string actions;
         [DataMember(EmitDefaultValue = false)] public double? moveX;
         [DataMember(EmitDefaultValue = false)] public double? moveZ;
@@ -35,14 +37,20 @@ namespace ValheimCliBridge
         [DataMember(EmitDefaultValue = false)] public int? offset;
         internal long? controlEpoch;
         public bool IsControl => operation == "input" || operation == "look" || operation == "action" || operation == "ui";
-        public bool IsWrite => operation == "teleport" || IsControl;
+        public bool IsWrite => operation == "teleport" || operation == "console" || IsControl;
 
         public void Validate()
         {
             if (!Guid.TryParseExact(id, "D", out _) || token == null || token.Length != 64)
                 throw new InvalidDataException("Invalid request schema");
-            if (operation != "status" && operation != "players" && operation != "teleport" && operation != "observe" && operation != "ui-list" && !IsControl && operation != "stop")
+            if (operation != "status" && operation != "players" && operation != "teleport" && operation != "observe" && operation != "ui-list" && operation != "console" && !IsControl && operation != "stop")
                 throw new InvalidDataException("Unknown operation");
+            if (operation == "console")
+            {
+                if (string.IsNullOrWhiteSpace(command) || command.Length > 512 || command != command.Trim() || command.Any(char.IsControl))
+                    throw new InvalidDataException("Console requires one trimmed command line of 1..512 characters without control characters");
+            }
+            else if (command != null) throw new InvalidDataException("Unexpected console command");
             if (operation == "teleport")
             {
                 if (!Finite(x) || !Finite(y) || !Finite(z) || Math.Abs(x.Value) > 10500 || Math.Abs(z.Value) > 10500 || y < -1000 || y > 5000)
@@ -122,6 +130,9 @@ namespace ValheimCliBridge
         [DataMember] public bool host;
         [DataMember] public bool teleportAllowed;
         [DataMember] public bool teleporting;
+        [DataMember] public bool consoleAllowed;
+        [DataMember(EmitDefaultValue = false)] public string[] consoleOutput;
+        [DataMember] public bool consoleOutputTruncated;
         [DataMember] public bool controlAllowed;
         [DataMember] public bool uiAllowed;
         [DataMember(EmitDefaultValue = false)] public UiControl[] ui;
@@ -173,7 +184,7 @@ namespace ValheimCliBridge
                 while (reader.Read())
                 {
                     if (reader.NodeType != XmlNodeType.Element) continue;
-                    var textField = reader.Name == "id" || reader.Name == "token" || reader.Name == "operation" || reader.Name == "actions" || reader.Name == "action" || reader.Name == "uiAction" || reader.Name == "button" || reader.Name == "target";
+                    var textField = reader.Name == "id" || reader.Name == "token" || reader.Name == "operation" || reader.Name == "actions" || reader.Name == "action" || reader.Name == "uiAction" || reader.Name == "button" || reader.Name == "target" || reader.Name == "command";
                     var numberField = reader.Name == "x" || reader.Name == "y" || reader.Name == "z" || reader.Name == "durationMs" || reader.Name == "moveX" || reader.Name == "moveZ" || reader.Name == "yaw" || reader.Name == "pitch" || reader.Name == "slot" || reader.Name == "scroll" || reader.Name == "offset";
                     if (reader.Depth != 1 || !fields.Add(reader.Name) || (!textField && !numberField))
                         throw new InvalidDataException("Invalid request fields");

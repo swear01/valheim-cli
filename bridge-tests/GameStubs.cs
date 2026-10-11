@@ -3,14 +3,22 @@ namespace UnityEngine
 {
     public struct Vector3 { public static Vector3 zero => new(); public float x, y, z; public Vector3(float x, float y, float z) { this.x = x; this.y = y; this.z = z; } }
     public struct Quaternion { }
-    public class Transform { public Vector3 position, eulerAngles; public Quaternion rotation; public Transform parent; public int SiblingIndex; public int GetSiblingIndex() => SiblingIndex; public string name = "root"; public bool IsChildOf(Transform other) => parent == other || parent?.IsChildOf(other) == true; }
+    public class Transform { public Vector3 position, eulerAngles; public Quaternion rotation; public Transform parent; public int SiblingIndex; public int GetSiblingIndex() => SiblingIndex; public string name = "root"; public bool IsChildOf(Transform other) => this == other || parent?.IsChildOf(other) == true; }
     public sealed class RectTransform : Transform { public void GetWorldCorners(Vector3[] corners) { corners[0] = new(0, 0, 0); corners[2] = new(100, 100, 0); } }
-    public static class RectTransformUtility { public static Vector2 WorldToScreenPoint(Camera camera, Vector3 v) => new(v.x, v.y); }
+    public static class RectTransformUtility { public static Camera LastCamera; public static Vector2 WorldToScreenPoint(Camera camera, Vector3 v) { LastCamera=camera; return new(v.x, v.y); } }
     public class Object { public static readonly List<MonoBehaviour> Objects = new(); public static T[] FindObjectsOfType<T>() => Objects.OfType<T>().ToArray(); }
     public class MonoBehaviour : Component { public bool enabled = true; public bool isActiveAndEnabled => enabled && gameObject.activeInHierarchy; public MonoBehaviour() { Object.Objects.Add(this); } }
     public static class Time { public static float realtimeSinceStartup, time, deltaTime = 0.02f; }
     public struct Vector2 { public float x, y; public Vector2(float x, float y) { this.x=x; this.y=y; } public static Vector2 operator -(Vector2 a, Vector2 b) => new(a.x-b.x,a.y-b.y); }
-    public static class Application { public static bool isFocused = true; }
+    public static class Application { public static bool isFocused = true, runInBackground; }
+    public enum CursorLockMode { None, Locked, Confined }
+    public static class Cursor
+    {
+        private static CursorLockMode mode; private static bool shown = true;
+        public static int LockWrites, VisibilityWrites;
+        public static CursorLockMode lockState { get => mode; set { mode=value; LockWrites++; } }
+        public static bool visible { get => shown; set { shown=value; VisibilityWrites++; } }
+    }
     public enum KeyCode { F12 }
     public static class Input { public static bool Panic; public static bool GetKey(KeyCode key) => Panic; }
     public static class Screen { public static int width = 1600, height = 900; }
@@ -25,7 +33,7 @@ namespace UnityEngine
         public T[] GetComponents<T>() => Components.Values.OfType<T>().ToArray();
         public T[] GetComponentsInChildren<T>() => new[] { this }.Concat(Object.Objects.Where(c => c.gameObject.activeInHierarchy && c.transform.IsChildOf(transform)).Select(c => c.gameObject)).Distinct()
             .SelectMany(o => o.GetComponents<T>().Concat(o.Components.Values.Where(v => v == null).Select(_ => default(T)))).ToArray();
-        public T[] GetComponentsInParent<T>() => GetComponents<T>();
+        public T[] GetComponentsInParent<T>() => GetComponents<T>().Concat(Parent == null ? System.Array.Empty<T>() : Parent.GetComponentsInParent<T>()).ToArray();
     }
     public class Component
     {
@@ -34,7 +42,7 @@ namespace UnityEngine
         public T GetComponent<T>() where T:class => gameObject.GetComponent<T>();
         public T[] GetComponentsInChildren<T>() => gameObject.GetComponentsInChildren<T>();
     }
-    public enum RenderMode { ScreenSpaceOverlay }
+    public enum RenderMode { ScreenSpaceOverlay, ScreenSpaceCamera, WorldSpace }
     public class Canvas : MonoBehaviour { public RenderMode renderMode; public Camera worldCamera; }
     public class CanvasGroup : MonoBehaviour { public float alpha = 1; }
     public sealed class Camera { public static Camera main; public Transform transform = new(); }
@@ -65,7 +73,7 @@ namespace BepInEx.Configuration
     public sealed class ConfigEntry<T> { public T Value; public ConfigEntry(T value) { Value = value; } }
     public sealed class ConfigDescription { public ConfigDescription(string description, object range) { } }
     public sealed class AcceptableValueRange<T> { public AcceptableValueRange(T min, T max) { } }
-    public sealed class ConfigFile { public ConfigEntry<T> Bind<T>(string group, string key, T value, object description) => new ConfigEntry<T>(value); }
+    public sealed class ConfigFile { public ConfigEntry<T> Bind<T>(string group, string key, T value, object description) => new ConfigEntry<T>(key == "Port" ? (T)(object)0 : value); }
 }
 namespace BepInEx
 {
@@ -79,7 +87,7 @@ namespace BepInEx
         public void StartCoroutine(System.Collections.IEnumerator routine) { Coroutines.Add(routine); }
         public void Destroy(object value) { Destroyed.Add(value); }
     }
-    public static class Paths { public static string ConfigPath => Path.GetTempPath(); }
+    public static class Paths { public static string ConfigPath = Path.GetTempPath(); }
 }
 public sealed class ZNet
 {
@@ -137,7 +145,18 @@ public sealed class PlayerController
     public bool InputAllowed = true;
     private bool TakeInput(bool look = false) => InputAllowed;
 }
-public static class Console { public static bool Visible; public static bool IsVisible() => Visible; }
+public class Terminal
+{
+    public Action<string, bool, bool> Handler;
+    public void TryRunCommand(string text, bool silentFail = false, bool skipAllowedCheck = false) => Handler?.Invoke(text, silentFail, skipAllowedCheck);
+    public void AddString(string text) => ValheimCliBridge.GameConsole.Postfix(this, text);
+}
+public sealed class Console : Terminal
+{
+    public static Console instance; public static bool Visible; public bool Enabled = true;
+    public static bool IsVisible() => Visible;
+    public bool IsConsoleEnabled() => Enabled;
+}
 public sealed class Menu { public static Menu instance = new(); public static bool Visible; public static bool IsVisible() => Visible; public void Show() { Visible = true; } }
 public sealed class Chat { public static Chat instance; public bool Focus; public bool HasFocus() => Focus; }
 public sealed class Inventory
@@ -176,11 +195,17 @@ public sealed class Hud
 }
 namespace HarmonyLib
 {
-    [AttributeUsage(AttributeTargets.Class)] public sealed class HarmonyPatch : Attribute { public HarmonyPatch(Type type, string method) { } }
+    public sealed class CodeInstruction
+    {
+        public System.Reflection.Emit.OpCode opcode; public object operand;
+        public CodeInstruction(System.Reflection.Emit.OpCode opcode, object operand = null) { this.opcode=opcode; this.operand=operand; }
+    }
+    [AttributeUsage(AttributeTargets.Class)] public sealed class HarmonyPatch : Attribute { public HarmonyPatch() { } public HarmonyPatch(Type type, string method) { } public HarmonyPatch(Type type, string method, Type[] arguments) { } }
     public sealed class Harmony { public Harmony(string id) { } public void PatchAll(System.Reflection.Assembly assembly) { } public void UnpatchSelf() { } }
     public static class AccessTools
     {
-        public static System.Reflection.MethodInfo Method(Type t, string name, Type[] parameters) => t.GetMethod(name, System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic, null, parameters, null);
+        public static string MissingTarget;
+        public static System.Reflection.MethodInfo Method(Type t, string name, Type[] parameters = null) => name == MissingTarget ? null : parameters == null ? t.GetMethod(name, System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic) : t.GetMethod(name, System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic, null, parameters, null);
         public static System.Reflection.FieldInfo Field(Type t, string name) => t.GetField(name,System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic);
     }
 }
@@ -235,3 +260,4 @@ namespace UnityEngine.UI
     public sealed class Toggle : Selectable, UnityEngine.EventSystems.IPointerClickHandler { }
     public sealed class Text : UnityEngine.MonoBehaviour { public string text = "Start"; }
 }
+public static class ZCursor { public static UnityEngine.CursorLockMode LockState { get; set; } private static void SetVisible(bool newVisible) { } }

@@ -11,11 +11,18 @@ static class UiTests
     static void Refused(Action action) { try { action(); } catch (ActionRefusedException) { return; } throw new Exception("Unsafe UI action accepted"); }
     sealed class ModSubmit : MonoBehaviour, ISubmitHandler { public int Calls; public void OnSubmit(BaseEventData data) { Calls++; } }
     sealed class ModClick : MonoBehaviour, IPointerClickHandler { }
+    sealed class ModScroll : MonoBehaviour, IScrollHandler { }
     static T Attach<T>(GameObject o, T c) where T : Component { c.gameObject = o; o.Components[typeof(T)] = c; return c; }
     static Response List(int offset = 0) { var r = new Response(); GameUi.List(r, offset); return r; }
     static Request Click(string id) => new() { operation = "ui", uiAction = "click", target = id };
     public static void Run()
     {
+        var previousObjects=UnityEngine.Object.Objects.ToArray(); var previousSystem=EventSystem.current;
+        var previousTime=Time.realtimeSinceStartup; var previousFocus=Application.isFocused;
+        var previousPlayer=Player.m_localPlayer; var previousNet=ZNet.instance; var previousStartup=FejdStartup.instance;
+        var previousCamera=Camera.main; var previousProjection=RectTransformUtility.LastCamera; var previousMenu=Menu.Visible;
+        try
+        {
         UnityEngine.Object.Objects.Clear(); EventSystem.current = new();
         var o = new GameObject { name = "mod-added-button" };
         Attach(o, new Canvas()); var b = Attach(o, new Button()); var label = Attach(o, new Text { text = "Mod action" });
@@ -48,6 +55,13 @@ static class UiTests
         EventSystem.current.Hits.Add(new() { gameObject = o });
         var group = Attach(o, new CanvasGroup { alpha = 0 });
         Assert(!List().ui.Single().interactable, "Transparent UI remained available"); group.alpha = 1;
+        var panel=new GameObject(); var parentGroup=Attach(panel,new CanvasGroup { alpha=0 }); o.transform.parent=panel.transform;
+        Assert(!List().ui.Single().interactable,"Transparent ancestor panel was ignored"); parentGroup.alpha=1; o.transform.parent=null;
+        var canvas=o.GetComponent<Canvas>(); canvas.renderMode=RenderMode.WorldSpace; Camera.main=new();
+        Assert(List().ui.Single().interactable && RectTransformUtility.LastCamera==Camera.main,"World-space Canvas did not use main camera fallback");
+        canvas.worldCamera=new(); Assert(List().ui.Single().interactable && RectTransformUtility.LastCamera==canvas.worldCamera,"Assigned Canvas camera was replaced");
+        canvas.renderMode=RenderMode.ScreenSpaceCamera; canvas.worldCamera=null; Assert(List().ui.Single().interactable && RectTransformUtility.LastCamera==null,"Unassigned screen-space camera no longer behaves as overlay");
+        canvas.renderMode=RenderMode.ScreenSpaceOverlay; Camera.main=previousCamera;
         r = Click(List().ui.Single().id); o.activeInHierarchy = false; Refused(() => GameUi.Execute(r));
         Assert(List().ui.Length == 0, "Inactive UI included"); o.activeInHierarchy = true;
         r = Click(List().ui.Single().id); Time.realtimeSinceStartup += 31; Refused(() => GameUi.Execute(r));
@@ -66,9 +80,12 @@ static class UiTests
         UnityEngine.Object.Objects.Clear(); o = new GameObject(); Attach(o,new Canvas()); Attach(o,new ModClick());
         EventSystem.current.Hits.Clear(); EventSystem.current.Hits.Add(new(){gameObject=o});
         var events=new List<string>();
-        foreach(var type in new[]{typeof(IPointerDownHandler),typeof(IPointerUpHandler),typeof(IPointerClickHandler)}) o.Handlers[type]=d=>{Assert(((PointerEventData)d).pointerCurrentRaycast.gameObject==o,"Native raycast context lost");events.Add(type.Name);};
+        foreach(var type in new[]{typeof(IPointerDownHandler),typeof(IPointerUpHandler),typeof(IPointerClickHandler)}) o.Handlers[type]=d=>{Assert(((PointerEventData)d).pointerCurrentRaycast.gameObject==o && ((PointerEventData)d).position.x==50 && ((PointerEventData)d).position.y==50,"Native raycast geometry/context lost");events.Add(type.Name);};
         GameUi.Execute(Click(List().ui.Single().id));
         Assert(events.SequenceEqual(new[]{"IPointerDownHandler","IPointerUpHandler","IPointerClickHandler"}),"Custom UI event order changed");
+        Attach(o,new ModScroll()); var scrolled=false;
+        o.Handlers[typeof(IScrollHandler)]=d=>{var pointer=(PointerEventData)d;Assert(pointer.scrollDelta.y==-2 && pointer.position.x==50,"Native scroll geometry/delta lost");scrolled=true;};
+        GameUi.Execute(new(){operation="ui",uiAction="scroll",target=List().ui.Single().id,scroll=-2}); Assert(scrolled,"Native scroll handler not invoked");
         Attach(o,new Button());
         foreach(var mouseButton in new[]{"left","right"})
         {
@@ -92,13 +109,22 @@ static class UiTests
         var oldMenu=Menu.Visible; Menu.Visible=true;
         Player.m_localPlayer=new Player(); ZNet.instance=new ZNet();
         Assert(!Execute(new(){operation="input",moveZ=1,durationMs=200}).ok,"UI permission unblocked gameplay in menu");
+        Player.m_localPlayer.View.Owner=false;
+        Assert(!Execute(Click(List().ui.Single().id)).ok,"Non-owner UI activation accepted"); Player.m_localPlayer.View.Owner=true;
         Player.m_localPlayer=null; ZNet.instance=null; Menu.Visible=oldMenu;
         var menuCapture=Execute(new(){operation="observe"}); Assert(menuCapture.state=="capture_pending","Menu screenshot refused");
         var capture=plugin.Coroutines.Last(); capture.MoveNext(); capture.MoveNext();
         Assert(Execute(new(){operation="observe"}).image!=null,"Menu screenshot not returned");
-        r=Click(List().ui.Single().id); Application.isFocused=false; Assert(!Execute(r).ok,"Unfocused menu activation accepted"); Application.isFocused=true;
+        r=Click(List().ui.Single().id); Application.isFocused=false; Assert(Execute(r).ok,"Unfocused menu activation refused"); r=Click(List().ui.Single().id);
         FejdStartup.instance=null; Assert(!Execute(r).ok,"No-scene UI accepted");
-        EventSystem.current=null; UnityEngine.Object.Objects.Clear(); GameUi.Invalidate();
-        System.Console.WriteLine("PASS: UI discovery, mod button native submit, stale/consumed/expired IDs, disabled/hidden/obstructed UI, paging, custom events, menu permission/focus and screenshots");
+        }
+        finally
+        {
+            EventSystem.current=previousSystem; Time.realtimeSinceStartup=previousTime; Application.isFocused=previousFocus;
+            Player.m_localPlayer=previousPlayer; ZNet.instance=previousNet; FejdStartup.instance=previousStartup; Menu.Visible=previousMenu;
+            Camera.main=previousCamera; RectTransformUtility.LastCamera=previousProjection;
+            UnityEngine.Object.Objects.Clear(); UnityEngine.Object.Objects.AddRange(previousObjects); GameUi.Invalidate();
+        }
+        System.Console.WriteLine("PASS: UI discovery, mod button native submit, stale/consumed/expired IDs, disabled/hidden/obstructed UI, paging, custom events, menu permissions/background and screenshots");
     }
 }
