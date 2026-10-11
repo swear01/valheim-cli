@@ -5,11 +5,11 @@ The agent reads JSON state and game screenshots, then requests game actions.
 Controls and console commands run inside Valheim; no OS keyboard/mouse events, shell execution,
 LLM, autonomous bot or ValheimMCP dependency is bundled.
 
-**0.2.0 is experimental and has not been tested in a running game.** Production
-builds target Valheim 1.0.16 references; an additional local build against the
-actual 1.0.17 game assembly passed. Neither compilation nor fixtures prove runtime
-Harmony, UI, GPU capture, multiplayer or full-playthrough compatibility. Only the
-earlier 0.1.0 release was smoke-tested in Windows Valheim 1.0.17.
+**0.3.0 is experimental.** It adds discoverable UI targets and menu control.
+Production builds target Valheim 1.0.16 references; an additional local build
+against the actual 1.0.17 assembly passes. The previous 0.2.0 controls passed a
+short Windows 1.0.17 single-player test with 41 plugins. That does not establish
+multiplayer, long-session or full-playthrough compatibility.
 
 ## Install
 
@@ -51,13 +51,15 @@ AllowTeleport = false
 Control requires ownership of the local, living character and no
 system menu, chat, console, text input, cutscene or teleport. It works for the host
 or a joining player without OP. Movement/combat/look are blocked while inventory,
-map, store, build selector or other blocking UI is open. UI commands require an
-open inventory, store or build selector. Settings permission changes apply on the
-next game update; Enabled / Port changes need a restart. The bridge enables Unity
-background execution while loaded. Commands do not
-activate the game window or move the OS pointer. While unfocused, native cursor
-locking/hiding is suppressed; foreground cursor behavior remains native. Do not
-control the same character concurrently.
+map, store, build selector or other blocking UI is open. UI activation also works
+in startup and pause menus; `uiAllowed` reports its separate permission gate.
+UI discovery is an authenticated read and remains available when control permission is disabled.
+Pages are ordered by hierarchy path; rediscover after a scene or hierarchy change.
+Settings permission changes apply on the next game update; Enabled / Port changes
+need a restart. The bridge enables Unity background execution while loaded.
+Commands do not activate the game window or move the OS pointer. While unfocused,
+native cursor locking/hiding is suppressed; foreground cursor behavior remains
+native. Do not control the same character concurrently.
 
 **F12 while the game is focused cancels actions and revokes AllowControl and AllowConsole.**
 Re-enable permissions manually to resume.
@@ -121,8 +123,10 @@ sensitivity do not affect these commands.
 | Toggle inventory / build selector | `action --action inventory` / `--action build-menu` |
 | Hide hand items / guardian power | `action --action hide` / `--action guardian` |
 | Place selected piece / rotate | `action --action place` / `--action rotate --scroll 1` |
-| Game UI click | `ui --ui-action click --pointer-x 0.3 --pointer-y 0.4 --button left` |
-| Game UI scroll | `ui --ui-action scroll --pointer-x 0.3 --pointer-y 0.4 --scroll -1` |
+| Open pause menu | `action --action menu` |
+| List UI targets (read) | `ui-list [--offset 64]` |
+| Activate UI target | `ui --ui-action click --target <id> --button left` |
+| Scroll UI target | `ui --ui-action scroll --target <id> --scroll -1` |
 
 Movement X/Z is relative to the player's look, bounded to -1…1; diagonals are
 normalized. `actions` accepts comma-separated attack, secondary, block, jump,
@@ -131,11 +135,32 @@ and hold states; jump/crouch/dodge fire once per lease. Crouch is the game's tog
 and can persist after the lease. A lease is not an autonomous navigation plan.
 
 Yaw/pitch are degree deltas within ±180: positive yaw turns right, positive pitch
-looks down. UI coordinates use the rendered game area, `(0,0)` top left and `(1,1)`
-bottom right. UI dispatch uses Unity EventSystem; it never moves the OS cursor.
-Click an inventory item, then its destination to move it. Scroll/rotation accepts
-nonzero integers within ±10. Raw `--keys`, `--buttons`, `--mouse-x/y` and `mouse`
-are removed from the unreleased 0.2.0 interface.
+looks down. Scroll/rotation accepts nonzero integers within ±10.
+
+Run `ui-list` to get labels, hierarchy paths, component types, supported actions
+and interactable/reason fields. This read works before character/world selection
+and does not require AllowControl. Use a returned ID with `ui --target <id>`;
+activation requires AllowControl and ownership in a world, or startup UI.
+Both discovery and activation work while the game is unfocused.
+It also works in the pause menu. Movement remains blocked by menus.
+
+IDs belong to the latest page, expire after 30 seconds and are consumed by any
+UI action. Re-list before each action, including a second inventory click. Lists
+return at most 64 targets and `uiNextOffset` for the next page. Hidden/obstructed
+and disabled targets are reported but cannot be activated. The handler rechecks
+visibility, interactability, label and object identity immediately before use.
+
+Standard buttons use Unity's `OnSubmit → onClick` path; toggles/custom click
+handlers and scroll controls receive their own Unity events. This preserves bound
+runtime listeners, including mod listeners, without invoking arbitrary named
+methods. Raycasts only check visibility and provide event-local geometry; the
+agent supplies no screen coordinates and no OS cursor/key event is emitted.
+
+Discovery covers active Canvas uGUI buttons, toggles, custom click/submit handlers
+and scroll handlers, including dynamically added mod objects. Input fields,
+IMGUI and UI Toolkit require a separate adapter; no universal mod compatibility
+is claimed. Text-only input/creation is not implemented. The coordinate-based
+0.2.0 UI interface is replaced in 0.3.0; update callers to use IDs.
 
 Movement/combat modifies arguments at the game's normal `Player.SetControls`
 call without skipping the original method. Look uses `Player.SetMouseLook`;
@@ -239,7 +264,7 @@ CI runs on Windows/Linux. Tests cover the production protocol, dispatcher, repla
 protection, Node-to-C# TCP, lease expiry, edge/hold actions, hook arguments, local
 ownership, background/UI guards, stop epochs, game-action calls, UI events and screenshot
 cleanup. Game/UI/Harmony fixtures do not execute real runtime patches or render
-real pixels. New controls, screenshots, multiplayer and long sessions require
+real pixels. UI discovery/menu activation, multiplayer and long sessions require
 the dedicated test-world checklist.
 
 Sources: [Harmony argument prefixes](https://harmony.pardeike.net/articles/patching-prefix.html),
