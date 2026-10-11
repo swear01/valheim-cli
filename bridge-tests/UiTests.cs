@@ -52,6 +52,9 @@ static class UiTests
         Refused(() => GameUi.Execute(r)); Assert(List().ui.Single().reason == "disabled", "Disabled button bypassed");
         b.interactable = true; r = Click(List().ui.Single().id); label.text = "Delete world";
         Refused(() => GameUi.Execute(r)); Assert(clicks == 1, "Changed button invoked old action");
+        r = Click(List().ui.Single().id); var activeSystem=EventSystem.current;
+        activeSystem.OnRaycast=()=>EventSystem.current=null; Refused(()=>GameUi.Execute(r));
+        activeSystem.OnRaycast=null; EventSystem.current=activeSystem;
         r = Click(List().ui.Single().id); EventSystem.current.Hits.Clear();
         Refused(() => GameUi.Execute(r)); Assert(!List().ui.Single().interactable, "Modal obstruction bypassed");
         EventSystem.current.Hits.Add(new() { gameObject = o });
@@ -61,6 +64,7 @@ static class UiTests
         Assert(!List().ui.Single().interactable,"Transparent ancestor panel was ignored"); parentGroup.alpha=1; Assert(List().ui.Single().path.StartsWith("ancestor[0]/componentless[0]/"),"Fixture hierarchy lost ancestor names"); o.transform.parent=null;
         var canvas=o.GetComponent<Canvas>(); canvas.renderMode=RenderMode.WorldSpace; Camera.main=new();
         Assert(List().ui.Single().interactable && RectTransformUtility.LastCamera==Camera.main,"World-space Canvas did not use main camera fallback");
+        Camera.main=null; Assert(!List().ui.Single().interactable,"World-space UI without any camera remained available"); Camera.main=new();
         canvas.worldCamera=new(); Assert(List().ui.Single().interactable && RectTransformUtility.LastCamera==canvas.worldCamera,"Assigned Canvas camera was replaced");
         canvas.renderMode=RenderMode.ScreenSpaceCamera; canvas.worldCamera=null; Assert(List().ui.Single().interactable && RectTransformUtility.LastCamera==null,"Unassigned screen-space camera no longer behaves as overlay");
         canvas.renderMode=RenderMode.ScreenSpaceOverlay; Camera.main=previousCamera;
