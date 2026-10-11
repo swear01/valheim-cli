@@ -7,7 +7,7 @@ The agent reads JSON state and game screenshots, then requests game actions.
 Controls and console commands run inside Valheim; no OS keyboard/mouse events, shell execution,
 LLM, autonomous bot or ValheimMCP dependency is bundled.
 
-**0.4.0 is experimental.** It combines native GUI discovery with isolated Windows
+**The bridge is experimental.** It combines native GUI discovery with isolated Windows
 Agent startup. Short Windows Valheim 1.0.17 tests passed character/world selection,
 movement, inventory guards, Console and manual pause/resume. Production builds
 target Valheim 1.0.16 references; an additional actual 1.0.17 API build passes.
@@ -19,8 +19,14 @@ bridge source compiled in a separate test location, not the exact release DLL.
 
 The game mod requires Valheim and BepInEx 5 for Valheim. CLI **0.5.1** is a native
 Rust executable, with no separately installed Node.js, Bun, Rust or .NET runtime.
-It embeds the original published **0.4.0 bridge**, its checksum manifest and the
-Windows Agent startup script. Existing 0.4.0 bridge installations are reused.
+The published 0.5.1 CLI embeds bridge 0.4.0. The next CLI **0.6.0** embeds bridge
+**0.5.0**, including HTTP, its checksum manifest and the Windows startup script.
+The installer reuses matching DLLs and refuses different versions; upgrade the
+mod through its manager or manual installation before using the matching launcher.
+
+Bridge 0.5.0 makes the CLI optional: install the [portable skill](../skills/valheim-control/SKILL.md)
+and use existing shell/HTTP tools on the game computer. This new HTTP interface is
+not present in the published 0.4.x mod. No MCP integration is required.
 On Windows, the CLI uses the GUI subsystem to prevent automatic console-window
 creation. It attaches only to an existing parent console, preserving redirected
 JSON stdout/stderr; it never allocates a console. PowerShell children run with
@@ -279,13 +285,40 @@ safe destinations in a test/backup world.
 
 ## Transport and failure limits
 
-The C# DLL is already the in-game service. An agent with a custom TCP client can
-connect directly without this CLI; all permissions, replay checks and game-method
-dispatch still run in the DLL. The CLI is a shell adapter, screenshot file writer,
-installer and optional Windows launcher. It is not a separate background server.
-The transport below is a custom framed JSON protocol, not an HTTP or MCP endpoint.
-Shell-only agents need the native CLI or their own protocol client. A DLL cannot
-launch Valheim before the game has loaded it.
+The C# DLL is the in-game service. Both clients share authentication, replay
+protection, permissions and the Unity dispatcher. The CLI is an optional shell
+adapter, screenshot file writer, installer and Windows launcher; it is not a
+separate server. A DLL cannot launch Valheim before the game has loaded it.
+
+### HTTP JSON (bridge 0.5.0+)
+
+Send `POST http://127.0.0.1:28761/v1/command`, HTTP/1.1, with
+`Content-Type: application/json` (optional `charset=utf-8`) and `Content-Length`.
+The JSON object requires a UUID `id`, local `token`, `operation`, and only the
+fields belonging to that operation. The [skill](../skills/valheim-control/SKILL.md)
+contains PowerShell/curl examples and the complete operation table.
+
+Responses are the same JSON objects as the TCP API, without a binary prefix.
+HTTP 200 carries both success and game-level refusal: always inspect `ok`.
+HTTP 401 means authentication failed; HTTP 400 means invalid request/schema.
+Malformed or incomplete connections may close without a complete reply.
+`observe.image` is base64 PNG, not a downloaded file. Check response `id` and
+verify state after writes. No auto retry is safe for an uncertain write.
+
+This is a deliberately bounded command endpoint, not a browser website or MCP
+server. Host must be `127.0.0.1:<configured port>`; requests with Origin,
+Transfer-Encoding, duplicate headers or another path/method are refused.
+Headers are limited to 8 KiB, bodies to 64 KiB, replies to 64 KiB (8 MiB for
+screenshots/UI). Expect: 100-continue is supported. Connections close after one
+response. No CORS or administrator HTTP URL registration is needed: HTTP uses
+the existing loopback TCP listener.
+
+### Existing framed TCP
+
+Native CLI and custom TCP clients retain the same four-byte big-endian framing.
+Valid requests start with zero; HTTP requests start with an ASCII method, so both
+protocols share the configured port and write-ID history. Switching protocols
+cannot bypass duplicate-write rejection.
 
 Only `127.0.0.1:28761` listens. Every operation needs the local 256-bit token and a
 UUID. No outbound AI endpoint or world-file editing is added. Never forward the
@@ -313,10 +346,9 @@ See the [manifest implementation](https://github.com/thunderstore-io/Thunderstor
 and [package-version model](https://github.com/thunderstore-io/Thunderstore/blob/master/django/thunderstore/repository/models/package_version.py).
 
 Requires Rust, Python 3.11+ for packaging, and .NET SDK 9 for bridge verification.
-These are developer tools, not user dependencies. The preparation script downloads
-the original bridge release and verifies both the archive and DLL SHA-256 before
-embedding it; rebuilding the C# project is an API check and does not replace that
-published DLL. Pinned NuGet references are compile-only and never bundled.
+These are developer tools, not user dependencies. The preparation script builds
+the current C# bridge and writes its version/SHA-256 manifest before embedding it.
+This ensures a CLI build installs the same bridge source that CI verifies. Pinned NuGet references are compile-only and never bundled.
 Control uses the game's existing Harmony/Unity UI runtime.
 
 ```sh

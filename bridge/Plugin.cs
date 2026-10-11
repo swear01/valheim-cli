@@ -9,7 +9,7 @@ using HarmonyLib;
 
 namespace ValheimCliBridge
 {
-    [BepInPlugin("swear01.ValheimCliBridge", "Valheim CLI Bridge", "0.4.0")]
+    [BepInPlugin("swear01.ValheimCliBridge", "Valheim CLI Bridge", "0.5.0")]
     public sealed class Plugin : BaseUnityPlugin
     {
         private Dispatcher dispatcher;
@@ -154,7 +154,7 @@ namespace ValheimCliBridge
             var net = ZNet.instance;
             var response = new Response
             {
-                id = request.id, ok = true, state = "observed", version = "0.4.0",
+                id = request.id, ok = true, state = "observed", version = "0.5.0",
                 inWorld = local != null && net != null,
                 host = net != null && net.IsServer(),
                 teleportAllowed = net != null && net.IsServer() && allowTeleport.Value,

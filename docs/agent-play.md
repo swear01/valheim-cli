@@ -4,13 +4,17 @@ Use a shell-capable, image-capable agent on the game computer. The mod supplies
 state, screenshots and game-internal actions; the agent supplies decisions.
 No AI subscription, model key or endpoint is configured by the mod.
 
+For ordinary skills without a CLI installation, use the [portable Valheim skill](../skills/valheim-control/SKILL.md)
+with bridge 0.5.0+. It calls the same native actions through HTTP JSON using
+existing shell/HTTP tools. The CLI examples below are the optional convenience client.
+
 The integration is independent of modpacks and mod managers. Obtain the path
 to the installation root containing `BepInEx`: the game folder for a manual
 installation, or the selected manager profile root. Use it as `--profile` on
 each command. Run `valheim --help` for commands, then `status` to verify the
 bridge/version/permissions and `ui-list` or `observe` for current UI state.
 The token is read from that root's `BepInEx/config`; do not copy it into agent
-instructions. There is no automatic installation discovery or MCP registration.
+instructions. There is no automatic installation discovery or MCP registration; neither is required for HTTP access.
 
 ## Recommended instructions for the agent
 

@@ -49,11 +49,15 @@ namespace ValheimCliBridge
                         client.SendTimeout = 1000;
                         using (var stream = client.GetStream())
                         {
+                            // Valid framed requests start with zero; HTTP starts with an ASCII method.
+                            var prefix = Protocol.ReadExact(stream, 4);
+                            var http = prefix[0] != 0;
                             Response response;
+                            var status = 200;
                             try
                             {
-                                var request = Protocol.Decode(Protocol.ReadFrame(stream));
-                                if (!Protocol.Authenticated(token, request.token)) response = Response.Error(request.id, "Unauthorized");
+                                var request = Protocol.Decode(http ? HttpTransport.Read(stream, prefix, Port) : Protocol.ReadFrame(stream, prefix));
+                                if (!Protocol.Authenticated(token, request.token)) { response = Response.Error(request.id, "Unauthorized"); status = 401; }
                                 else if (request.operation == "stop" && stopInput != null) response = stopInput(request.id);
                                 else if (request.IsWrite && writes.Contains(request.id)) response = Response.Error(request.id, "Write ID already used; inspect status, do not retry");
                                 else if (request.IsWrite && writes.Count >= 65536) response = Response.Error(request.id, "Write limit reached; restart the bridge before a new session");
@@ -65,8 +69,9 @@ namespace ValheimCliBridge
                                     if (request.IsWrite && response.state == "cancelled") writes.Remove(request.id);
                                 }
                             }
-                            catch { response = Response.Error(null, "Invalid request"); }
-                            Protocol.WriteFrame(stream, response);
+                            catch { response = Response.Error(null, "Invalid request"); status = 400; }
+                            if (http) HttpTransport.Write(stream, response, status);
+                            else Protocol.WriteFrame(stream, response);
                         }
                         lock (gate) active = null;
                     }
