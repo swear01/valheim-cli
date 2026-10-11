@@ -3,7 +3,11 @@ namespace UnityEngine
 {
     public struct Vector3 { public static Vector3 zero => new(); public float x, y, z; public Vector3(float x, float y, float z) { this.x = x; this.y = y; this.z = z; } }
     public struct Quaternion { }
-    public sealed class Transform { public Vector3 position, eulerAngles; public Quaternion rotation; }
+    public class Transform { public Vector3 position, eulerAngles; public Quaternion rotation; public Transform parent; public int SiblingIndex; public int GetSiblingIndex() => SiblingIndex; public GameObject Owner; public string name => Owner?.name ?? "root"; public bool IsChildOf(Transform other) => this == other || parent?.IsChildOf(other) == true; }
+    public sealed class RectTransform : Transform { public void GetWorldCorners(Vector3[] corners) { corners[0] = new(0, 0, 0); corners[2] = new(100, 100, 0); } }
+    public static class RectTransformUtility { public static Camera LastCamera; public static Vector2 WorldToScreenPoint(Camera camera, Vector3 v) { LastCamera=camera; return new(v.x, v.y); } }
+    public class Object { public static readonly List<MonoBehaviour> Objects = new(); public static T[] FindObjectsOfType<T>() => Objects.OfType<T>().ToArray(); }
+    public class MonoBehaviour : Component { public bool enabled = true; public bool isActiveAndEnabled => enabled && gameObject.activeInHierarchy; public MonoBehaviour() { Object.Objects.Add(this); } }
     public static class Time { public static float realtimeSinceStartup, time, deltaTime = 0.02f; }
     public struct Vector2 { public float x, y; public Vector2(float x, float y) { this.x=x; this.y=y; } public static Vector2 operator -(Vector2 a, Vector2 b) => new(a.x-b.x,a.y-b.y); }
     public static class Application { public static bool isFocused = true, runInBackground; }
@@ -20,16 +24,27 @@ namespace UnityEngine
     public static class Screen { public static int width = 1600, height = 900; }
     public class GameObject
     {
+        public string name = "button"; public bool activeInHierarchy = true; public Transform transform; public GameObject() { transform = new RectTransform { Owner = this }; } public int GetInstanceID() => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this);
         public readonly Dictionary<Type, object> Components = new();
         public readonly Dictionary<Type, Action<EventSystems.BaseEventData>> Handlers = new();
-        public T GetComponentInParent<T>() where T:class => Components.GetValueOrDefault(typeof(T)) as T;
+        public T GetComponent<T>() where T:class => Components.Values.OfType<T>().FirstOrDefault();
+        private GameObject Parent => transform.parent?.Owner;
+        public T GetComponentInParent<T>() where T:class => GetComponent<T>() ?? Parent?.GetComponentInParent<T>();
+        public T[] GetComponents<T>() => Components.Values.OfType<T>().ToArray();
+        public T[] GetComponentsInChildren<T>() => new[] { this }.Concat(Object.Objects.Where(c => c.gameObject.activeInHierarchy && c.transform.IsChildOf(transform)).Select(c => c.gameObject)).Distinct()
+            .SelectMany(o => o.GetComponents<T>().Concat(o.Components.Values.Where(v => v == null).Select(_ => default(T)))).ToArray();
+        public T[] GetComponentsInParent<T>() => GetComponents<T>().Concat(Parent == null ? System.Array.Empty<T>() : Parent.GetComponentsInParent<T>()).ToArray();
     }
     public class Component
     {
+        public Transform transform => gameObject.transform;
         public GameObject gameObject = new();
-        public T GetComponent<T>() where T:class => gameObject.Components.GetValueOrDefault(typeof(T)) as T;
+        public T GetComponent<T>() where T:class => gameObject.GetComponent<T>();
+        public T[] GetComponentsInChildren<T>() => gameObject.GetComponentsInChildren<T>();
     }
-    public class Canvas : Component { }
+    public enum RenderMode { ScreenSpaceOverlay, ScreenSpaceCamera, WorldSpace }
+    public class Canvas : MonoBehaviour { public RenderMode renderMode; public Camera worldCamera; }
+    public class CanvasGroup : MonoBehaviour { public float alpha = 1; }
     public sealed class Camera { public static Camera main; public Transform transform = new(); }
     public class Texture2D
     {
@@ -85,7 +100,7 @@ public sealed class Player : UnityEngine.Component
 {
     public static Player m_localPlayer;
     public static bool NullList;
-    public UnityEngine.Transform transform = new();
+    public new UnityEngine.Transform transform = new();
     public bool Dead, Teleporting, Cutscene, PlaceMode, Attacking, Dodging, AcceptTeleport = true, GuardianAllowed = true, NativeInputAllowed = true;
     public float Stamina = 50;
     public readonly Inventory Inventory = new();
@@ -142,7 +157,7 @@ public sealed class Console : Terminal
     public static bool IsVisible() => Visible;
     public bool IsConsoleEnabled() => Enabled;
 }
-public static class Menu { public static bool Visible; public static bool IsVisible() => Visible; }
+public sealed class Menu { public static Menu instance = new(); public static bool Visible; public static bool IsVisible() => Visible; public void Show() { Visible = true; } }
 public sealed class Chat { public static Chat instance; public bool Focus; public bool HasFocus() => Focus; }
 public sealed class Inventory
 {
@@ -196,7 +211,7 @@ namespace HarmonyLib
 }
 namespace UnityEngine.EventSystems
 {
-    public class BaseEventData { }
+    public class BaseEventData { public BaseEventData(EventSystem system = null) { } }
     public sealed class PointerEventData : BaseEventData
     {
         public enum InputButton { Left, Right, Middle }
@@ -211,24 +226,39 @@ namespace UnityEngine.EventSystems
     {
         public static EventSystem current;
         public readonly List<RaycastResult> Hits = new();
-        public void RaycastAll(PointerEventData data,List<RaycastResult> hits){hits.AddRange(Hits);}
+        public Action OnRaycast;
+        public void RaycastAll(PointerEventData data,List<RaycastResult> hits){hits.AddRange(Hits);OnRaycast?.Invoke();}
     }
     public interface IPointerClickHandler { } public interface IPointerDownHandler { } public interface IPointerUpHandler { }
-    public interface IScrollHandler { }
+    public interface IScrollHandler { } public interface ISubmitHandler { void OnSubmit(BaseEventData data); }
     public static class ExecuteEvents
     {
         public delegate void EventFunction<T>(T handler, BaseEventData data);
         public static readonly EventFunction<IPointerClickHandler> pointerClickHandler = (_,_)=>{};
         public static readonly EventFunction<IPointerDownHandler> pointerDownHandler = (_,_)=>{};
         public static readonly EventFunction<IPointerUpHandler> pointerUpHandler = (_,_)=>{};
+        public static readonly EventFunction<ISubmitHandler> submitHandler = (h,d)=>h.OnSubmit(d);
         public static readonly EventFunction<IScrollHandler> scrollHandler = (_,_)=>{};
-        public static GameObject GetEventHandler<T>(GameObject target) => target?.Handlers.ContainsKey(typeof(T))==true ? target : null;
+        public static GameObject GetEventHandler<T>(GameObject target) => target != null && (target.Handlers.ContainsKey(typeof(T)) || target.GetComponents<MonoBehaviour>().OfType<T>().Any()) ? target : null;
         public static bool Execute<T>(GameObject target, BaseEventData data,EventFunction<T> handler)
         {
-            if(target!=null && target.Handlers.TryGetValue(typeof(T),out var action)){action(data);return true;} return false;
+            if(target!=null && target.Handlers.TryGetValue(typeof(T),out var action)){action(data);return true;} if (target != null) { var handlers=target.GetComponents<MonoBehaviour>().OfType<T>().ToArray(); foreach(var h in handlers) handler(h,data); return handlers.Length>0; } return false;
         }
         public static GameObject ExecuteHierarchy<T>(GameObject target, BaseEventData data,EventFunction<T> handler) => Execute(target,data,handler) ? target : null;
     }
 }
 
+public sealed class FejdStartup { public static FejdStartup instance; }
+namespace UnityEngine.UI
+{
+    public class Selectable : UnityEngine.MonoBehaviour { public bool interactable = true; public bool IsInteractable() => interactable; }
+    public sealed class Button : Selectable, UnityEngine.EventSystems.ISubmitHandler, UnityEngine.EventSystems.IPointerClickHandler
+    {
+        public Action Click;
+        public void OnSubmit(UnityEngine.EventSystems.BaseEventData data) { if(isActiveAndEnabled && IsInteractable()) Click?.Invoke(); }
+    }
+    public sealed class InputField : Selectable, UnityEngine.EventSystems.IPointerClickHandler, UnityEngine.EventSystems.IScrollHandler { }
+    public sealed class Toggle : Selectable, UnityEngine.EventSystems.IPointerClickHandler { }
+    public sealed class Text : UnityEngine.MonoBehaviour { public string text = "Start"; }
+}
 public static class ZCursor { public static UnityEngine.CursorLockMode LockState { get; set; } private static void SetVisible(bool newVisible) { } }

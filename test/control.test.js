@@ -35,11 +35,13 @@ test('Semantic control validation rejects raw keys, invalid actions and mixed co
     assert.throws(() => validateInput({ ...base, ...change }));
   }
   assert.throws(() => validateInput({ durationMs: 200 }), /Empty/);
+  for (const input of [{ offset: -1 }, { offset: 100001 }, { offset: 1.5 }, { target: 'bad' }]) assert.throws(() => validateInput(input, 'ui-list'));
+  validateInput({ offset: 64 }, 'ui-list');
   validateInput({ actions: 'jump,dodge', durationMs: 200 });
   validateInput({ yaw: -120, pitch: 10 }, 'look');
   validateInput({ action: 'slot', slot: 8 }, 'action');
-  validateInput({ uiAction: 'click', pointerX: 0, pointerY: 1, button: 'left' }, 'ui');
-  for (const [input, op] of [[{}, 'look'], [{ yaw: 181 }, 'look'], [{ action: 'slot', slot: 0 }, 'action'], [{ action: 'inventory', slot: 1 }, 'action'], [{ action: 'rotate', scroll: 0 }, 'action'], [{ uiAction: 'click', pointerX: 0.5 }, 'ui'], [{ uiAction: 'scroll', pointerX: 0, pointerY: 1 }, 'ui'], [{ uiAction: 'click', pointerX: 0, pointerY: Infinity }, 'ui']]) assert.throws(() => validateInput(input, op));
+  validateInput({ uiAction: 'click', target: '00000000-0000-0000-0000-000000000001', button: 'left' }, 'ui');
+  for (const [input, op] of [[{}, 'look'], [{ yaw: 181 }, 'look'], [{ action: 'slot', slot: 0 }, 'action'], [{ action: 'inventory', slot: 1 }, 'action'], [{ action: 'rotate', scroll: 0 }, 'action'], [{ uiAction: 'click', target: 'bad' }, 'ui'], [{ uiAction: 'scroll', target: '00000000-0000-0000-0000-000000000001' }, 'ui'], [{ uiAction: 'click', target: 'bad' }, 'ui']]) assert.throws(() => validateInput(input, op));
   for (const args of [['input', '--move-z', '1'], ['input', '--ms', '5001', '--move-z', '1', '--confirm'], ['input', '--keys', 'W', '--confirm'], ['mouse', '--confirm'], ['input', '--confirm'], ['status', '--move-z', '1'], ['stop', '--confirm'], ['status', '--image', 'frame.png']]) {
     await assert.rejects(main([...args, '--profile', '.']));
   }
@@ -58,8 +60,11 @@ test('CLI sends game actions, degree look and UI events without OS key fields', 
       await main(['stop', ...common]);
       await main(['look', '--yaw', '30', '--pitch', '-10', '--confirm', ...common]);
       await main(['action', '--action', 'slot', '--slot', '1', '--confirm', ...common]);
-      await main(['ui', '--ui-action', 'click', '--pointer-x', '0.3', '--pointer-y', '0.8', '--confirm', ...common]);
-      assert.deepEqual(commands.map(c => c.operation), ['input', 'stop', 'look', 'action', 'ui']);
+      await main(['ui', '--ui-action', 'click', '--target', '00000000-0000-0000-0000-000000000001', '--confirm', ...common]);
+      await main(['ui-list', '--offset', '64', ...common]);
+      assert.deepEqual(commands.map(c => c.operation), ['input', 'stop', 'look', 'action', 'ui', 'ui-list']);
+      assert.equal(commands[4].target, '00000000-0000-0000-0000-000000000001');
+      assert.equal(commands[5].offset, 64);
       assert.equal(commands[0].durationMs, 500);
       assert.equal(commands[0].moveZ, 1);
       assert.equal(commands[0].actions, 'run');
@@ -102,6 +107,7 @@ test('Large screenshots are accepted only for observe, and lost input acknowledg
     const connection = { port, token: 'a'.repeat(64) };
     assert.ok((await request({ ...connection, operation: 'observe' })).image.length > 65536);
     await assert.rejects(request({ ...connection, operation: 'status' }), /frame|large/);
+    assert.ok((await request({ ...connection, operation: 'ui-list' })).image.length > 65536);
   });
   const server = createServer(socket => socket.once('data', () => socket.resetAndDestroy()));
   server.listen(0, '127.0.0.1'); await once(server, 'listening');

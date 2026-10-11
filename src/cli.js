@@ -12,10 +12,11 @@ valheim observe --profile <folder> [--image <new.png>]
 valheim input --profile <folder> --confirm [--move-x -1..1] [--move-z -1..1]
   [--actions attack,secondary,block,jump,crouch,run,dodge] [--ms 200]
 valheim look --profile <folder> --confirm [--yaw <degrees>] [--pitch <degrees>]
-valheim action --profile <folder> --confirm --action interact|slot|inventory|build-menu|hide|guardian|place|rotate
+valheim action --profile <folder> --confirm --action menu|interact|slot|inventory|build-menu|hide|guardian|place|rotate
   [--slot 1..8] [--scroll -10..10]
+valheim ui-list --profile <folder> [--offset 0]
 valheim ui --profile <folder> --confirm --ui-action click|scroll
-  --pointer-x 0..1 --pointer-y 0..1 [--button left|right|middle] [--scroll -10..10]
+  --target <ID from ui-list> [--button left|right|middle] [--scroll -10..10]
 valheim console --profile <folder> --command "help" --confirm
 valheim stop --profile <folder>
 valheim teleport <x> <y> <z> --profile <folder> --confirm [--request-id <UUID>]
@@ -24,17 +25,18 @@ Input requires AllowControl=true; background operation is supported. F12 in the 
 Console requires AllowConsole=true + enabled game console; native restrictions apply.
 Movement is relative to player look. Input lasts 50..5000 ms; poll status and observe.
 Look takes degree deltas: positive yaw turns right, positive pitch looks down.
-UI coordinates start at top left. UI events are dispatched inside the game.
+UI IDs expire after 30 seconds, any UI action or another ui-list. Re-list before each action.
+Buttons use their native submit/click handlers, including startup menus and mod UI.
 Teleport coordinates are world X, Y (height), Z; requires host + AllowTeleport=true.
 All results are JSON. No automatic write retries.`;
 
-const inputOptions = { '--actions': 'actions', '--move-x': 'moveX', '--move-z': 'moveZ', '--ms': 'durationMs', '--yaw': 'yaw', '--pitch': 'pitch', '--action': 'action', '--slot': 'slot', '--ui-action': 'uiAction', '--button': 'button', '--scroll': 'scroll', '--pointer-x': 'pointerX', '--pointer-y': 'pointerY', '--command': 'command' };
+const inputOptions = { '--actions': 'actions', '--move-x': 'moveX', '--move-z': 'moveZ', '--ms': 'durationMs', '--yaw': 'yaw', '--pitch': 'pitch', '--action': 'action', '--slot': 'slot', '--ui-action': 'uiAction', '--button': 'button', '--scroll': 'scroll', '--target': 'target', '--offset': 'offset', '--command': 'command' };
 const controlCommands = ['input', 'look', 'action', 'ui'];
-const stringFields = new Set(['actions', 'action', 'uiAction', 'button', 'command']);
+const stringFields = new Set(['actions', 'action', 'uiAction', 'button', 'target', 'command']);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 export function validateInput(input, operation = 'input') {
-  const fields = { input: ['actions', 'moveX', 'moveZ', 'durationMs'], look: ['yaw', 'pitch'], action: ['action', 'slot', 'scroll'], ui: ['uiAction', 'pointerX', 'pointerY', 'button', 'scroll'] }[operation];
+  const fields = { input: ['actions', 'moveX', 'moveZ', 'durationMs'], look: ['yaw', 'pitch'], action: ['action', 'slot', 'scroll'], ui: ['uiAction', 'target', 'button', 'scroll'], 'ui-list': ['offset'] }[operation];
   if (!fields || Object.keys(input).some(k => !fields.includes(k))) throw new Error('Unexpected action fields');
   const bounded = (n, max) => Number.isFinite(n) && Math.abs(n) <= max;
   if (operation === 'input') {
@@ -46,12 +48,14 @@ export function validateInput(input, operation = 'input') {
   } else if (operation === 'look') {
     if (input.yaw === undefined && input.pitch === undefined || !bounded(input.yaw ?? 0, 180) || !bounded(input.pitch ?? 0, 180)) throw new Error('Look requires degree deltas in -180..180');
   } else if (operation === 'action') {
-    if (!['interact', 'slot', 'inventory', 'build-menu', 'hide', 'guardian', 'place', 'rotate'].includes(input.action)) throw new Error('Unknown game action');
+    if (!['menu', 'interact', 'slot', 'inventory', 'build-menu', 'hide', 'guardian', 'place', 'rotate'].includes(input.action)) throw new Error('Unknown game action');
     if (input.action === 'slot' ? !Number.isInteger(input.slot) || input.slot < 1 || input.slot > 8 : input.slot !== undefined) throw new Error('Slot requires 1..8 and only applies to slot');
     if (input.action === 'rotate' ? !Number.isInteger(input.scroll) || !input.scroll || Math.abs(input.scroll) > 10 : input.scroll !== undefined) throw new Error('Rotate requires nonzero scroll in -10..10');
+  } else if (operation === 'ui-list') {
+    if (input.offset !== undefined && (!Number.isInteger(input.offset) || input.offset < 0 || input.offset > 100000)) throw new Error('Offset must be 0..100000');
   } else {
     if (!['click', 'scroll'].includes(input.uiAction)) throw new Error('Unknown UI action');
-    if (['pointerX', 'pointerY'].some(k => !bounded(input[k], 1) || input[k] < 0)) throw new Error('UI requires normalized pointer x/y in 0..1');
+    if (!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(input.target ?? '')) throw new Error('UI requires a target ID from ui-list');
     if (input.button !== undefined && !['left', 'right', 'middle'].includes(input.button)) throw new Error('Unknown UI button');
     if (input.uiAction === 'scroll' ? !Number.isInteger(input.scroll) || !input.scroll || Math.abs(input.scroll) > 10 : input.scroll !== undefined) throw new Error('Scroll requires nonzero -10..10');
   }
@@ -118,7 +122,7 @@ export async function install(profile, artifactRoot = fileURLToPath(new URL('../
 export async function main(args) {
   if (args.length === 0 || args.length === 1 && ['--help', 'help'].includes(args[0])) return { ok: true, help };
   const command = args.shift();
-  if (!['install', 'status', 'players', 'teleport', 'observe', 'stop', 'console', ...controlCommands].includes(command)) throw new Error('Unknown command. Run valheim --help');
+  if (!['install', 'status', 'players', 'teleport', 'observe', 'stop', 'ui-list', 'console', ...controlCommands].includes(command)) throw new Error('Unknown command. Run valheim --help');
   const values = [];
   let profile;
   let port = 28761;
@@ -158,12 +162,13 @@ export async function main(args) {
   }
   if (!profile) throw new Error('--profile is required');
   if (!['teleport', 'console', ...controlCommands].includes(command) && (values.length || confirm || id)) throw new Error('Unexpected arguments');
-  if (!controlCommands.includes(command) && command !== 'console' && Object.keys(input).length || command !== 'observe' && imagePath) throw new Error('Unexpected arguments');
+  if (!controlCommands.includes(command) && command !== 'ui-list' && command !== 'console' && Object.keys(input).length || command !== 'observe' && imagePath) throw new Error('Unexpected arguments');
   if (controlCommands.includes(command)) {
     if (values.length || !confirm) throw new Error('Control commands require --confirm and named options');
     if (command === 'input') input.durationMs ??= 200;
     validateInput(input, command);
   }
+  if (command === 'ui-list') validateInput(input, command);
   if (command === 'console') {
     if (values.length || !confirm || Object.keys(input).length !== 1 || typeof input.command !== 'string' ||
       !input.command.trim() || input.command !== input.command.trim() || input.command.length > 512 || /[\u0000-\u001f\u007f-\u009f]/u.test(input.command)) {
