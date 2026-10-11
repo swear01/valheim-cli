@@ -16,6 +16,7 @@ namespace ValheimCliBridge
         private Server server;
         private ConfigEntry<bool> allowTeleport;
         private ConfigEntry<bool> allowControl;
+        private ConfigEntry<bool> allowConsole;
         internal static Plugin Instance;
         private Harmony harmony;
         private bool controlReady, appliedControl;
@@ -32,6 +33,7 @@ namespace ValheimCliBridge
             var port = Config.Bind("Bridge", "Port", 28761, new ConfigDescription("Local loopback port. Restart after changes.", new AcceptableValueRange<int>(1024, 65535)));
             allowTeleport = Config.Bind("Permissions", "AllowTeleport", false, "Allow the local host to teleport their own character. Client writes are refused.");
             allowControl = Config.Bind("Permissions", "AllowControl", false, "Allow bounded game-internal actions for your local character, including joining clients. Requires game focus. F12 revokes permission. Never enable while someone else is playing this character.");
+            allowConsole = Config.Bind("Permissions", "AllowConsole", false, "Allow direct native console commands, including mod commands. Requires game focus and an enabled game console. Native command permissions still apply. F12 revokes this permission.");
             if (!enabled.Value) return;
             try
             {
@@ -63,6 +65,8 @@ namespace ValheimCliBridge
                     (error is InvalidDataException ? "; stop the game, delete swear01.ValheimCliBridge.token from the config folder, and restart." : "; check the config folder permissions and whether the configured port is already in use."));
             }
         }
+        private bool CanConsole => controlReady && allowConsole != null && allowConsole.Value && Application.isFocused &&
+            Console.instance != null && Console.instance.IsConsoleEnabled();
         private bool CanControl(Player local) => controlReady && allowControl != null && allowControl.Value && Application.isFocused &&
             local != null && ZNet.instance != null && !local.IsDead() && !local.IsTeleporting() &&
             !local.InCutscene() && local.GetComponent<ZNetView>() != null && local.GetComponent<ZNetView>().IsOwner() &&
@@ -81,7 +85,12 @@ namespace ValheimCliBridge
         }
         private void Update()
         {
-            if (allowControl != null && Input.GetKey(KeyCode.F12)) { allowControl.Value = false; input?.Stop("panic"); }
+            if (Input.GetKey(KeyCode.F12))
+            {
+                if (allowControl != null) allowControl.Value = false;
+                if (allowConsole != null) allowConsole.Value = false;
+                input?.Stop("panic");
+            }
             if (input != null && controlledPlayer != Player.m_localPlayer)
             {
                 input.Stop("player_changed");
@@ -121,7 +130,7 @@ namespace ValheimCliBridge
                 player = local != null ? local.GetPlayerName() : null,
                 position = local != null ? PositionOf(local.transform.position) : null,
                 teleporting = local != null && local.IsTeleporting(),
-                controlAllowed = CanControl(local), foreground = Application.isFocused,
+                consoleAllowed = CanConsole, controlAllowed = CanControl(local), foreground = Application.isFocused,
                 inputActive = input != null && input.Active, inputState = input?.Reason, inputId = input?.Id,
                 dead = local != null && local.IsDead(),
                 health = local != null ? local.GetHealth() : 0, maxHealth = local != null ? local.GetMaxHealth() : 0,
@@ -130,6 +139,13 @@ namespace ValheimCliBridge
             };
             if (request.operation == "stop")
                 return StopInput(request.id);
+            if (request.operation == "console")
+            {
+                if (!CanConsole) return Response.Error(request.id, "Console requires AllowConsole=true, a focused game and an enabled game console", "cancelled");
+                input?.Stop("console");
+                image = null;
+                return GameConsole.Execute(request, response);
+            }
             if (request.IsControl)
             {
                 if (!CanControl(local) || input == null) return Response.Error(request.id, "Requires local player ownership, game focus, AllowControl=true, and no menu/chat/console/text input", "cancelled");
