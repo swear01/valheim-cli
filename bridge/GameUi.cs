@@ -26,7 +26,7 @@ namespace ValheimCliBridge
                 .Where(c => c != null && c.isActiveAndEnabled &&
                     Supported(c))
                 .Select(c => c.gameObject).Distinct()
-                .OrderBy(o => o.GetInstanceID()).ToArray();
+                .OrderBy(o => HierarchyPath(o), StringComparer.Ordinal).ToArray();
             response.uiTotal = objects.Length;
             response.uiNextOffset = offset + 64 < objects.Length ? (int?)(offset + 64) : null;
             response.ui = objects.Skip(offset).Take(64).Select(o =>
@@ -45,9 +45,8 @@ namespace ValheimCliBridge
             var selectable = o.GetComponent<Selectable>();
             var actions = new List<string>();
             if (components.Any(c => Supported(c) && (c is IPointerClickHandler || c is ISubmitHandler))) actions.Add("click");
-            if (components.Any(c => c is IScrollHandler)) actions.Add("scroll");
-            var path = o.name + "[" + o.transform.GetSiblingIndex() + "]";
-            for (var parent = o.transform.parent; parent != null; parent = parent.parent) path = parent.name + "[" + parent.GetSiblingIndex() + "]/" + path;
+            if (components.Any(c => Supported(c) && c is IScrollHandler)) actions.Add("scroll");
+            var path = HierarchyPath(o);
             // shortcut: IMGUI/UI Toolkit controls need a separate adapter if a profile uses them.
             var label = string.Join(" ", o.GetComponentsInChildren<MonoBehaviour>()
                 .Where(c => c != null && c.isActiveAndEnabled && (c is Text || c.GetType().FullName == "TMPro.TextMeshProUGUI"))
@@ -58,10 +57,16 @@ namespace ValheimCliBridge
             return new UiControl
             {
                 path = Limit(path, 240), label = Limit(label, 160),
-                type = Limit(string.Join(",", components.Where(c => c is IPointerClickHandler || c is ISubmitHandler || c is IScrollHandler).Select(c => c.GetType().FullName)), 160),
+                type = Limit(string.Join(",", components.Where(c => Supported(c)).Select(c => c.GetType().FullName)), 160),
                 actions = actions.ToArray(), interactable = visible && enabled,
                 reason = !enabled ? "disabled" : !visible ? "hidden_or_obstructed" : null
             };
+        }
+        private static string HierarchyPath(GameObject o)
+        {
+            var path = o.name + "[" + o.transform.GetSiblingIndex() + "]";
+            for (var parent = o.transform.parent; parent != null; parent = parent.parent) path = parent.name + "[" + parent.GetSiblingIndex() + "]/" + path;
+            return path;
         }
         private static string Limit(string value, int length) => value.Length > length ? value.Substring(0, length) : value;
         private static bool AvailablePoint(GameObject target, out Vector2 point, out RaycastResult raycast)
@@ -95,6 +100,7 @@ namespace ValheimCliBridge
         {
             if (!targets.TryGetValue(r.target, out var target) || target.Object == null || Time.realtimeSinceStartup - listedAt > 30)
                 throw new ActionRefusedException("Unknown or expired UI target; run ui-list again");
+            if (r.uiAction == "scroll" && !r.scroll.HasValue) throw new ActionRefusedException("Scroll requires a delta");
             var current = Describe(target.Object, out var point, out var hit);
             if (current.path != target.Description.path || current.label != target.Description.label || current.type != target.Description.type || !current.interactable || !current.actions.Contains(r.uiAction))
                 throw new ActionRefusedException("UI target changed, disabled or obstructed; run ui-list again");
@@ -126,6 +132,7 @@ namespace ValheimCliBridge
                 try { ExecuteEvents.Execute(o, data, ExecuteEvents.pointerUpHandler); executed = ExecuteEvents.Execute(o, data, ExecuteEvents.pointerClickHandler); }
                 finally { data.eligibleForClick = false; }
             }
+            // Earlier pointer callbacks may already have mutated state; preserve the unknown-outcome error.
             if (!executed) throw new InvalidOperationException("UI handler disappeared during activation; inspect UI before another action");
         }
     }

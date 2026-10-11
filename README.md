@@ -53,6 +53,8 @@ system menu, chat, console, text input, cutscene or teleport. It works for the h
 or a joining player without OP. Movement/combat/look are blocked while inventory,
 map, store, build selector or other blocking UI is open. UI activation also works
 in startup and pause menus; `uiAllowed` reports its separate permission gate.
+UI discovery is an authenticated read and remains available when control permission is disabled.
+Pages are ordered by hierarchy path; rediscover after a scene or hierarchy change.
 Settings permission changes apply on the next game update; Enabled / Port changes
 need a restart. The bridge enables Unity background execution while loaded.
 Commands do not activate the game window or move the OS pointer. While unfocused,

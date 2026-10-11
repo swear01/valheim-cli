@@ -36,6 +36,7 @@ static class UiTests
         }
         var field = new GameObject(); Attach(field,new Canvas()); Attach(field,new InputField());
         label.enabled=false; Assert(List().ui.Single().label=="","Hidden text leaked into UI label"); label.enabled=true;
+        Attach(o,new InputField()); Assert(!List().ui.Single().actions.Contains("scroll"),"Unsupported input field advertised scrolling"); o.Components.Remove(typeof(InputField));
         var first = List().ui.Single();
         Assert(first.interactable && first.label == "Mod action" && first.type.Contains("Button"), "Dynamic mod button not described");
         var r = Click(first.id); r.id = Guid.NewGuid().ToString(); r.token = new string('a',64);
@@ -45,6 +46,7 @@ static class UiTests
         r=Click(List().ui.Single().id); r.button="right"; Refused(()=>GameUi.Execute(r));
         var duplicate=new GameObject { name=o.name }; duplicate.transform.SiblingIndex=1;
         Attach(duplicate,new Canvas()); Attach(duplicate,new Button());
+        Assert(List().ui.Select(c=>c.path).SequenceEqual(List().ui.Select(c=>c.path).OrderBy(path=>path,StringComparer.Ordinal)),"UI ordering is not deterministic");
         Assert(List().ui.Select(c=>c.path).Distinct().Count()==2,"Repeated button names have ambiguous hierarchy paths"); duplicate.activeInHierarchy=false;
         r = Click(List().ui.Single().id); b.interactable = false;
         Refused(() => GameUi.Execute(r)); Assert(List().ui.Single().reason == "disabled", "Disabled button bypassed");
@@ -55,8 +57,8 @@ static class UiTests
         EventSystem.current.Hits.Add(new() { gameObject = o });
         var group = Attach(o, new CanvasGroup { alpha = 0 });
         Assert(!List().ui.Single().interactable, "Transparent UI remained available"); group.alpha = 1;
-        var panel=new GameObject(); var parentGroup=Attach(panel,new CanvasGroup { alpha=0 }); o.transform.parent=panel.transform;
-        Assert(!List().ui.Single().interactable,"Transparent ancestor panel was ignored"); parentGroup.alpha=1; o.transform.parent=null;
+        var intermediate=new GameObject { name="componentless" }; var panel=new GameObject { name="ancestor" }; intermediate.transform.parent=panel.transform; var parentGroup=Attach(panel,new CanvasGroup { alpha=0 }); o.transform.parent=intermediate.transform;
+        Assert(!List().ui.Single().interactable,"Transparent ancestor panel was ignored"); parentGroup.alpha=1; Assert(List().ui.Single().path.StartsWith("ancestor[0]/componentless[0]/"),"Fixture hierarchy lost ancestor names"); o.transform.parent=null;
         var canvas=o.GetComponent<Canvas>(); canvas.renderMode=RenderMode.WorldSpace; Camera.main=new();
         Assert(List().ui.Single().interactable && RectTransformUtility.LastCamera==Camera.main,"World-space Canvas did not use main camera fallback");
         canvas.worldCamera=new(); Assert(List().ui.Single().interactable && RectTransformUtility.LastCamera==canvas.worldCamera,"Assigned Canvas camera was replaced");
@@ -85,6 +87,7 @@ static class UiTests
         Assert(events.SequenceEqual(new[]{"IPointerDownHandler","IPointerUpHandler","IPointerClickHandler"}),"Custom UI event order changed");
         Attach(o,new ModScroll()); var scrolled=false;
         o.Handlers[typeof(IScrollHandler)]=d=>{var pointer=(PointerEventData)d;Assert(pointer.scrollDelta.y==-2 && pointer.position.x==50,"Native scroll geometry/delta lost");scrolled=true;};
+        Refused(()=>GameUi.Execute(new(){operation="ui",uiAction="scroll",target=List().ui.Single().id}));
         GameUi.Execute(new(){operation="ui",uiAction="scroll",target=List().ui.Single().id,scroll=-2}); Assert(scrolled,"Native scroll handler not invoked");
         Attach(o,new Button());
         foreach(var mouseButton in new[]{"left","right"})
@@ -109,6 +112,8 @@ static class UiTests
         var oldMenu=Menu.Visible; Menu.Visible=true;
         Player.m_localPlayer=new Player(); ZNet.instance=new ZNet();
         Assert(!Execute(new(){operation="input",moveZ=1,durationMs=200}).ok,"UI permission unblocked gameplay in menu");
+        TextInput.Visible=true; Assert(!Execute(Click(List().ui.Single().id)).ok,"World text editing allowed UI activation"); TextInput.Visible=false;
+        Minimap.Typing=true; Assert(!Execute(Click(List().ui.Single().id)).ok,"Map text editing allowed UI activation"); Minimap.Typing=false;
         Player.m_localPlayer.View.Owner=false;
         Assert(!Execute(Click(List().ui.Single().id)).ok,"Non-owner UI activation accepted"); Player.m_localPlayer.View.Owner=true;
         Player.m_localPlayer=null; ZNet.instance=null; Menu.Visible=oldMenu;

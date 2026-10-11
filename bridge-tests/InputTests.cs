@@ -1,7 +1,6 @@
 using System.Text;
 using ValheimCliBridge;
 using UnityEngine;
-using UnityEngine.EventSystems;
 
 static class InputTests
 {
@@ -183,7 +182,7 @@ static class InputTests
         Execute(new Request{operation="action",action="slot",slot=1});Assert(Player.m_localPlayer.Hotbar==1,"Hotbar did not use game method");
         Execute(new Request{operation="action",action="interact"});Assert(Player.m_localPlayer.Interactions==1,"Interact did not use game method");
         Player.m_localPlayer.NativeInputAllowed=false;
-        foreach(var name in new[]{"interact","slot","hide","guardian","place","rotate","build-menu"})
+        foreach(var name in new[]{"interact","slot","hide","guardian","place","rotate","build-menu","menu"})
             Assert(!Execute(new Request{operation="action",action=name,slot=name=="slot"?1:null,scroll=name=="rotate"?1:null}).ok,"Native player refusal accepted "+name);
         Assert(Player.m_localPlayer.Interactions==1,"Refused interaction changed the game");
         Execute(new Request{operation="action",action="inventory"});Assert(InventoryGui.Visible,"Inventory game method not invoked");

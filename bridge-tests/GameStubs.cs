@@ -3,7 +3,7 @@ namespace UnityEngine
 {
     public struct Vector3 { public static Vector3 zero => new(); public float x, y, z; public Vector3(float x, float y, float z) { this.x = x; this.y = y; this.z = z; } }
     public struct Quaternion { }
-    public class Transform { public Vector3 position, eulerAngles; public Quaternion rotation; public Transform parent; public int SiblingIndex; public int GetSiblingIndex() => SiblingIndex; public string name = "root"; public bool IsChildOf(Transform other) => this == other || parent?.IsChildOf(other) == true; }
+    public class Transform { public Vector3 position, eulerAngles; public Quaternion rotation; public Transform parent; public int SiblingIndex; public int GetSiblingIndex() => SiblingIndex; public GameObject Owner; public string name => Owner?.name ?? "root"; public bool IsChildOf(Transform other) => this == other || parent?.IsChildOf(other) == true; }
     public sealed class RectTransform : Transform { public void GetWorldCorners(Vector3[] corners) { corners[0] = new(0, 0, 0); corners[2] = new(100, 100, 0); } }
     public static class RectTransformUtility { public static Camera LastCamera; public static Vector2 WorldToScreenPoint(Camera camera, Vector3 v) { LastCamera=camera; return new(v.x, v.y); } }
     public class Object { public static readonly List<MonoBehaviour> Objects = new(); public static T[] FindObjectsOfType<T>() => Objects.OfType<T>().ToArray(); }
@@ -24,11 +24,11 @@ namespace UnityEngine
     public static class Screen { public static int width = 1600, height = 900; }
     public class GameObject
     {
-        public string name = "button"; public bool activeInHierarchy = true; public Transform transform = new RectTransform(); public int GetInstanceID() => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this);
+        public string name = "button"; public bool activeInHierarchy = true; public Transform transform; public GameObject() { transform = new RectTransform { Owner = this }; } public int GetInstanceID() => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this);
         public readonly Dictionary<Type, object> Components = new();
         public readonly Dictionary<Type, Action<EventSystems.BaseEventData>> Handlers = new();
         public T GetComponent<T>() where T:class => Components.Values.OfType<T>().FirstOrDefault();
-        private GameObject Parent => Object.Objects.Select(c => c.gameObject).FirstOrDefault(o => o.transform == transform.parent);
+        private GameObject Parent => transform.parent?.Owner;
         public T GetComponentInParent<T>() where T:class => GetComponent<T>() ?? Parent?.GetComponentInParent<T>();
         public T[] GetComponents<T>() => Components.Values.OfType<T>().ToArray();
         public T[] GetComponentsInChildren<T>() => new[] { this }.Concat(Object.Objects.Where(c => c.gameObject.activeInHierarchy && c.transform.IsChildOf(transform)).Select(c => c.gameObject)).Distinct()

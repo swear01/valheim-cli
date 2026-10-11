@@ -77,7 +77,7 @@ namespace ValheimCliBridge
             !Console.IsVisible() && (Chat.instance == null || !Chat.instance.HasFocus()) && !Menu.IsVisible() && !TextInput.IsVisible() && !Minimap.InTextInput();
         private bool CanUseUi(Player local) => controlReady && allowControl != null && allowControl.Value &&
             !Console.IsVisible() && (Chat.instance == null || !Chat.instance.HasFocus()) &&
-            (local == null ? FejdStartup.instance != null : ZNet.instance != null && !local.IsTeleporting() &&
+            (local == null ? FejdStartup.instance != null : ZNet.instance != null && !local.IsTeleporting() && !TextInput.IsVisible() && !Minimap.InTextInput() &&
                 local.GetComponent<ZNetView>() != null && local.GetComponent<ZNetView>().IsOwner());
         private static bool CanMove(Player local) => !InventoryGui.IsVisible() && !StoreGui.IsVisible() && !Minimap.IsOpen() &&
             !Hud.IsPieceSelectionVisible() && !GameCamera.InFreeFly() && !PlayerCustomizaton.IsBarberGuiVisible() && !Hud.InRadial() && GameInput.CanTakeInput(local);
