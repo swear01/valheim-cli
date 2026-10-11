@@ -26,9 +26,9 @@ creation. It attaches only to an existing parent console, preserving redirected
 JSON stdout/stderr; it never allocates a console. PowerShell children run with
 `CREATE_NO_WINDOW`. The launcher excludes this CLI's executable path when checking
 for an existing Valheim process, since both executables are named `valheim.exe`.
-In `cmd.exe` scripts, use `start "" /B /WAIT valheim.exe ...` to wait for the CLI
-and receive its exit code. Direct callers should wait for the child process and
-capture stdout/stderr.
+Agents should invoke the CLI directly, capture stdout/stderr and wait for its
+process exit code. A `cmd.exe /C` wrapper can return success before a GUI
+executable finishes; its exit code is not a reliable CLI result.
 No mod manager or QoL modpack is required. Download the ZIP matching your OS and
 CPU from [GitHub Releases](https://github.com/swear01/valheim-cli/releases), extract
 it, and run the executable directly or add its folder to PATH:
