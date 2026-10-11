@@ -194,9 +194,9 @@ an operating loop and pending live acceptance checks.
 valheim console --profile <folder> --command "help 2 4" --confirm
 ```
 
-Enable `AllowConsole = true` separately in the bridge's Permissions settings and
-bring Valheim to the foreground. The game console must already be enabled (for
-example by launching with `-console`). The bridge does not open the console UI,
+Enable `AllowConsole = true` separately in the bridge's Permissions settings.
+Console commands also work while unfocused. The game console must already be
+enabled (for example by launching with `-console`). The bridge does not open the console UI,
 change its input field or enable cheats/admin permissions.
 
 The request runs `Console.instance.TryRunCommand(command, false, false)` on the
