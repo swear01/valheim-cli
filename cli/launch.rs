@@ -54,10 +54,12 @@ pub fn launch(profile: &Path, game: &Path) -> Result<Value> {
         return Err("Install this CLI version of the bridge before launch-agent".into());
     }
     let script = format!(
-        "& {{\n{}\n}} -Game '{}' -Profile '{}'",
+        "& {{\n{}\n}} -Game '{}' -Profile '{}' -Cli '{}'",
         include_str!("../src/windows-agent-launch.ps1"),
         launch_path(game).replace('\'', "''"),
-        launch_path(profile).replace('\'', "''")
+        launch_path(profile).replace('\'', "''"),
+        launch_path(&std::env::current_exe().map_err(|e| format!("Cannot locate CLI: {e}"))?)
+            .replace('\'', "''")
     );
     let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
     let output = Command::new("powershell.exe")
