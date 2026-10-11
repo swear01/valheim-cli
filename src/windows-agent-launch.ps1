@@ -8,7 +8,7 @@ try {
     $preloader=Join-Path $Profile 'BepInEx\core\BepInEx.Preloader.dll'
     if(!(Test-Path -LiteralPath $preloader -PathType Leaf)){throw 'BepInEx preloader missing'}
     $config=Get-Content -LiteralPath (Join-Path $Profile 'BepInEx\config\swear01.ValheimCliBridge.cfg') -Raw
-    if($config -match '(?m)^Enabled\s*=\s*false\s*$' -or $config -notmatch '(?m)^AllowControl\s*=\s*true\s*$') {throw 'Enable the bridge and AllowControl before launching in an isolated desktop'}
+    if($config -match '(?m)^[ \t]*Enabled\s*=\s*false\s*$' -or $config -notmatch '(?m)^[ \t]*AllowControl\s*=\s*true\s*$') {throw 'Enable the bridge and AllowControl before launching in an isolated desktop'}
     if(($Game+$preloader) -match '["\x00-\x1f]'){throw 'Invalid launch path'}
     Add-Type -TypeDefinition @'
 using System;
@@ -38,7 +38,7 @@ public static class ValheimAgentLaunch {
             try {
                 if(Process.GetProcessesByName("valheim").Length!=0)throw new InvalidOperationException("Valheim is already running; preserve that session");
                 var station=new StringBuilder(256);int needed;
-                if(!GetUserObjectInformation(GetProcessWindowStation(),2,station,512,out needed) || !string.Equals(station.ToString(),"WinSta0",StringComparison.OrdinalIgnoreCase))
+                if(!GetUserObjectInformation(GetProcessWindowStation(),2,station,station.Capacity * 2,out needed) || !string.Equals(station.ToString(),"WinSta0",StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Run launch-agent in the signed-in Windows desktop session");
                 var name="ValheimCliAgent_"+Guid.NewGuid().ToString("N");
                 DesktopName=name;

@@ -22,7 +22,7 @@ export async function launchAgent(profile, game) {
     child.on('error', reject);
     child.on('close', code => {
       if (code !== 0) return reject(new Error(error.trim() || `Agent launcher exited ${code}`));
-      try { resolve(JSON.parse(output)); } catch { reject(new Error('Agent launcher returned invalid JSON')); }
+      try { resolve(JSON.parse(output.trim())); } catch { reject(new Error('Agent launcher returned invalid JSON')); }
     });
   });
 }

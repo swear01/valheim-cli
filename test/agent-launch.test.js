@@ -24,7 +24,7 @@ test('Windows launcher refuses disabled permissions before creating any desktop 
     await writeFile(join(root, 'valheim.exe'), 'never executable');
     await writeFile(join(root, 'BepInEx/core/BepInEx.Preloader.dll'), 'fixture');
     const script = fileURLToPath(new URL('../src/windows-agent-launch.ps1', import.meta.url));
-    for (const config of ['[Permissions]\nAllowControl = false\n', '[Bridge]\nEnabled = false\n[Permissions]\nAllowControl = true\n']) {
+    for (const config of ['[Permissions]\nAllowControl = false\n', '[Bridge]\nEnabled = false\n[Permissions]\nAllowControl = true\n', '[Bridge]\n  Enabled = false\n[Permissions]\n  AllowControl = true\n']) {
       await writeFile(join(root, 'BepInEx/config/swear01.ValheimCliBridge.cfg'), config);
       const child = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-Game', join(root, 'valheim.exe'), '-Profile', root], { windowsHide: true, encoding: 'utf8', timeout: 10000 });
       assert.equal(child.status, 1, child.error?.message);

@@ -22,6 +22,7 @@ namespace ValheimCliBridge
         private bool controlReady, appliedControl;
         private bool? previousBackground;
         private float? previousVolume;
+        private bool? previousAudioPause;
         internal bool AgentMode { get; private set; }
         private InputController input;
         private Player controlledPlayer;
@@ -58,7 +59,7 @@ namespace ValheimCliBridge
                 controlReady = true;
                 previousBackground = Application.runInBackground;
                 Application.runInBackground = true;
-                if (AgentMode) { previousVolume = AudioListener.volume; AudioListener.volume = 0; }
+                if (AgentMode) { previousVolume = AudioListener.volume; previousAudioPause = AudioListener.pause; AudioListener.pause = true; AudioListener.volume = 0; }
                 server = new Server(port.Value, token, dispatcher, error => Logger.LogError("CLI bridge connection failed: " + error.GetType().Name), StopInput, () => input.Epoch);
                 Logger.LogInfo("CLI bridge listening on 127.0.0.1:" + port.Value + "; token stored in local config folder. Never share it.");
             }
@@ -67,6 +68,7 @@ namespace ValheimCliBridge
                 controlReady = false;
                 if (previousBackground.HasValue) Application.runInBackground = previousBackground.Value;
                 if (previousVolume.HasValue) AudioListener.volume = previousVolume.Value;
+                if (previousAudioPause.HasValue) AudioListener.pause = previousAudioPause.Value;
                 Instance = null;
                 harmony?.UnpatchSelf();
                 input?.Dispose();
@@ -119,6 +121,7 @@ namespace ValheimCliBridge
         {
             if (Instance != this || !AgentMode) return;
             if (!Application.runInBackground) Application.runInBackground = true;
+            if (!AudioListener.pause) AudioListener.pause = true;
             if (AudioListener.volume != 0) AudioListener.volume = 0;
         }
         private void OnApplicationFocus(bool focused)
@@ -132,6 +135,7 @@ namespace ValheimCliBridge
             controlReady = false;
             if (previousBackground.HasValue) Application.runInBackground = previousBackground.Value;
             if (previousVolume.HasValue) AudioListener.volume = previousVolume.Value;
+            if (previousAudioPause.HasValue) AudioListener.pause = previousAudioPause.Value;
             input?.Dispose();
             server?.Dispose();
             if (appliedControl && controlledPlayer != null && controlledPlayer == Player.m_localPlayer)

@@ -10,7 +10,7 @@ namespace UnityEngine
     public class MonoBehaviour : Component { public bool enabled = true; public bool isActiveAndEnabled => enabled && gameObject.activeInHierarchy; public MonoBehaviour() { Object.Objects.Add(this); } }
     public static class Time { public static float timeScale=1, realtimeSinceStartup, time, deltaTime = 0.02f; }
     public struct Vector2 { public float x, y; public Vector2(float x, float y) { this.x=x; this.y=y; } public static Vector2 operator -(Vector2 a, Vector2 b) => new(a.x-b.x,a.y-b.y); }
-    public static class AudioListener { public static float volume=1; }
+    public static class AudioListener { public static float volume=1; public static bool pause; }
     public static class Application { public static bool isFocused = true, runInBackground; }
     public enum CursorLockMode { None, Locked, Confined }
     public static class Cursor

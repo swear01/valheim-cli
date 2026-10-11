@@ -5,11 +5,11 @@ The agent reads JSON state and game screenshots, then requests game actions.
 Controls and console commands run inside Valheim; no OS keyboard/mouse events, shell execution,
 LLM, autonomous bot or ValheimMCP dependency is bundled.
 
-**0.3.0 is experimental.** It adds discoverable UI targets and menu control.
-Production builds target Valheim 1.0.16 references; an additional local build
-against the actual 1.0.17 assembly passes. The previous 0.2.0 controls passed a
-short Windows 1.0.17 single-player test with 41 plugins. That does not establish
-multiplayer, long-session or full-playthrough compatibility.
+**0.4.0 is experimental.** It combines native GUI discovery with isolated Windows
+Agent startup. Short Windows Valheim 1.0.17 tests passed character/world selection,
+movement, inventory guards, Console and manual pause/resume. Production builds
+target Valheim 1.0.16 references; an additional actual 1.0.17 API build passes.
+Multiplayer, long sessions and a full playthrough remain unverified.
 
 ## Install
 
@@ -55,6 +55,8 @@ map, store, build selector or other blocking UI is open. UI activation also work
 in startup and pause menus; `uiAllowed` reports its separate permission gate.
 UI discovery is an authenticated read and remains available when control permission is disabled.
 Pages are ordered by hierarchy path; rediscover after a scene or hierarchy change.
+Discovery scans active canvases and checks at most 64 targets per page; use it
+after UI changes rather than polling every frame.
 Settings permission changes apply on the next game update; Enabled / Port changes
 need a restart. The bridge enables Unity background execution while loaded.
 Commands do not activate the game window or move the OS pointer. While unfocused,
@@ -292,8 +294,8 @@ Alt+Tab list. Exit through the native Quit button after saving/logging out.
 `launched` means process creation succeeded; poll `status` for readiness.
 
 The launcher passes `--valheim-cli-agent`. This makes cursor locking/hiding stay
-suppressed even when Unity reports focus within its isolated desktop, silences
-game audio while the bridge is loaded, and retains background execution. It does
+suppressed even when Unity reports focus within its isolated desktop, pauses the
+game audio listener while the bridge is loaded, and retains background execution. It does
 not grant action or Console permissions. `foreground` reports **Unity focus**, not
 whether the game is on your visible Windows desktop. `agentMode`, `paused` and
 `timeScale` report the bridge mode and native simulation state. Manual menus and
@@ -303,4 +305,4 @@ The GUI renderer and GPU remain active. This is not a headless dedicated server.
 Ordinary launching can still take foreground before the plugin loads; use this
 launcher for desktop isolation. The launcher uses Windows desktop/process APIs;
 gameplay, Console and UI actions continue to use game methods without simulated
-OS keyboard or mouse input. Multiplayer and long sessions remain unverified.
+OS keyboard or mouse input. Multiplayer, direct video audio and long sessions remain unverified.
