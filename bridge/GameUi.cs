@@ -80,6 +80,7 @@ namespace ValheimCliBridge
             rect.GetWorldCorners(corners);
             var camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay || canvas.renderMode == RenderMode.ScreenSpaceCamera && canvas.worldCamera == null
                 ? null : canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
+            if (canvas.renderMode == RenderMode.WorldSpace && camera == null) return false;
             var lo = RectTransformUtility.WorldToScreenPoint(camera, corners[0]);
             var hi = RectTransformUtility.WorldToScreenPoint(camera, corners[2]);
             foreach (var fraction in new[] { new Vector2(.5f, .5f), new Vector2(.1f, .1f), new Vector2(.9f, .1f), new Vector2(.1f, .9f), new Vector2(.9f, .9f) })
@@ -105,6 +106,7 @@ namespace ValheimCliBridge
             if (current.path != target.Description.path || current.label != target.Description.label || current.type != target.Description.type || !current.interactable || !current.actions.Contains(r.uiAction))
                 throw new ActionRefusedException("UI target changed, disabled or obstructed; run ui-list again");
             var system = EventSystem.current;
+            if (system == null) throw new ActionRefusedException("Game UI event system unavailable");
             var data = new PointerEventData(system)
             {
                 position = point, pressPosition = point, pointerCurrentRaycast = hit, pointerPressRaycast = hit, eligibleForClick = true, clickCount = 1,

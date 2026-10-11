@@ -226,7 +226,8 @@ namespace UnityEngine.EventSystems
     {
         public static EventSystem current;
         public readonly List<RaycastResult> Hits = new();
-        public void RaycastAll(PointerEventData data,List<RaycastResult> hits){hits.AddRange(Hits);}
+        public Action OnRaycast;
+        public void RaycastAll(PointerEventData data,List<RaycastResult> hits){hits.AddRange(Hits);OnRaycast?.Invoke();}
     }
     public interface IPointerClickHandler { } public interface IPointerDownHandler { } public interface IPointerUpHandler { }
     public interface IScrollHandler { } public interface ISubmitHandler { void OnSubmit(BaseEventData data); }
