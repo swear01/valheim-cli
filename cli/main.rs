@@ -2,13 +2,27 @@
 
 #[cfg(windows)]
 fn attach_existing_console() {
+    use std::ffi::c_void;
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn AttachConsole(process_id: u32) -> i32;
+        fn GetStdHandle(kind: u32) -> *mut c_void;
+        fn GetFileType(handle: *mut c_void) -> u32;
+        fn SetStdHandle(kind: u32, handle: *mut c_void) -> i32;
     }
     // Attach only to the caller's console; never allocate a new window.
     unsafe {
+        let redirected = [(-10i32) as u32, (-11i32) as u32, (-12i32) as u32].map(|kind| {
+            let handle = GetStdHandle(kind);
+            (kind, handle, matches!(GetFileType(handle), 1 | 3))
+        });
         AttachConsole(u32::MAX);
+        // AttachConsole can replace pipes inherited through cmd.exe.
+        for (kind, handle, preserve) in redirected {
+            if preserve {
+                SetStdHandle(kind, handle);
+            }
+        }
     }
 }
 

@@ -33,17 +33,19 @@ fn windowless_executable_preserves_piped_output_and_exit_codes() {
             .is_empty()
         );
     }
-    let output = Command::new("cmd.exe")
-        .args(["/D", "/S", "/C"])
-        .raw_arg(format!("\"\"{executable}\" --version\""))
-        .creation_flags(0x08000000)
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{output:?}");
-    assert_eq!(
-        serde_json::from_slice::<Value>(&output.stdout).unwrap()["version"],
-        env!("CARGO_PKG_VERSION")
-    );
+    for (argument, ok) in [("--version", true), ("--invalid", false)] {
+        let output = Command::new("cmd.exe")
+            .args(["/D", "/S", "/C"])
+            .raw_arg(format!("\"\"{executable}\" {argument}\""))
+            .creation_flags(0x08000000)
+            .output()
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(if ok { &output.stdout } else { &output.stderr })
+                .unwrap()["ok"],
+            ok
+        );
+    }
 }
 
 #[test]
