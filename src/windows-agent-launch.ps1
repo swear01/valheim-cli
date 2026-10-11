@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Game,[Parameter(Mandatory=$true)][string]$Profile)
+param([Parameter(Mandatory=$true)][string]$Game,[Parameter(Mandatory=$true)][string]$Profile,[Parameter(Mandatory=$true)][string]$Cli)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 try {
@@ -30,13 +30,22 @@ public static class ValheimAgentLaunch {
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateProcess(string app,StringBuilder args,IntPtr processAttributes,IntPtr threadAttributes,bool inherit,uint flags,IntPtr environment,string directory,ref Startup startup,out ProcessInfo info);
     [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
     [DllImport("user32.dll")] static extern uint WaitForInputIdle(IntPtr process,uint milliseconds);
-    public static uint Start(string exe,string preloader) {
+    public static uint Start(string exe,string preloader,string cli) {
         using(var gate=new Mutex(false,"Local\\ValheimCliAgentLaunch")) {
             bool entered;
             try {entered=gate.WaitOne(0);} catch(AbandonedMutexException) {entered=true;}
             if(!entered)throw new InvalidOperationException("Agent launch already in progress");
             try {
-                if(Process.GetProcessesByName("valheim").Length!=0)throw new InvalidOperationException("Valheim is already running; preserve that session");
+                foreach(var process in Process.GetProcessesByName("valheim")) {
+                    using(process) {
+                        string path;
+                        try {path=process.MainModule.FileName;}
+                        catch(System.ComponentModel.Win32Exception) {if(process.HasExited)continue;throw;}
+                        catch(InvalidOperationException) {if(process.HasExited)continue;throw;}
+                        if(!string.Equals(path,cli,StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidOperationException("Valheim is already running; preserve that session");
+                    }
+                }
                 var station=new StringBuilder(256);int needed;
                 if(!GetUserObjectInformation(GetProcessWindowStation(),2,station,station.Capacity * 2,out needed) || !string.Equals(station.ToString(),"WinSta0",StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Run launch-agent in the signed-in Windows desktop session");
@@ -57,7 +66,7 @@ public static class ValheimAgentLaunch {
     }
 }
 '@
-    $gameId=[ValheimAgentLaunch]::Start($Game,$preloader)
+    $gameId=[ValheimAgentLaunch]::Start($Game,$preloader,$Cli)
     @{ok=$true;state='launched';pid=$gameId;desktop=[ValheimAgentLaunch]::DesktopName;agentMode=$true;next='Poll status and ui-list; launched does not mean the bridge is ready.'}|ConvertTo-Json -Compress
 } catch {
     [Console]::Error.WriteLine($_.Exception.GetBaseException().Message)

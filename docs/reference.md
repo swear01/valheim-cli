@@ -17,10 +17,15 @@ bridge source compiled in a separate test location, not the exact release DLL.
 
 ## Install
 
-The game mod requires Valheim and BepInEx 5 for Valheim. CLI **0.5.0** is a native
+The game mod requires Valheim and BepInEx 5 for Valheim. CLI **0.5.1** is a native
 Rust executable, with no separately installed Node.js, Bun, Rust or .NET runtime.
 It embeds the original published **0.4.0 bridge**, its checksum manifest and the
 Windows Agent startup script. Existing 0.4.0 bridge installations are reused.
+On Windows, the CLI uses the GUI subsystem to prevent automatic console-window
+creation. It attaches only to an existing parent console, preserving redirected
+JSON stdout/stderr; it never allocates a console. PowerShell children run with
+`CREATE_NO_WINDOW`. The launcher excludes this CLI's executable path when checking
+for an existing Valheim process, since both executables are named `valheim.exe`.
 No mod manager or QoL modpack is required. Download the ZIP matching your OS and
 CPU from [GitHub Releases](https://github.com/swear01/valheim-cli/releases), extract
 it, and run the executable directly or add its folder to PATH:

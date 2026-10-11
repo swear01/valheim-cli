@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 import subprocess
+import struct
 import tomllib
 import zipfile
 
@@ -17,6 +18,10 @@ binary = ROOT / "target" / target / "release" / executable
 data = binary.read_bytes()
 if "windows" in target and not data.startswith(b"MZ"):
     raise SystemExit("Invalid Windows executable")
+if "windows" in target:
+    pe = struct.unpack_from("<I", data, 0x3c)[0]
+    if struct.unpack_from("<H", data, pe + 24 + 68)[0] != 2:
+        raise SystemExit("Windows CLI must use the windowless GUI subsystem")
 metadata = json.loads(subprocess.check_output([
     "cargo", "metadata", "--locked", "--format-version", "1", "--filter-platform", target,
 ], cwd=ROOT, text=True))
