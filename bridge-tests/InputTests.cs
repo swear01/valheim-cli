@@ -24,9 +24,9 @@ static class InputTests
         foreach (var r in new[]{
             new Request{operation="look",yaw=181}, new Request{operation="look"},
             new Request{operation="action",action="slot",slot=0}, new Request{operation="action",action="inventory",slot=1},
-            new Request{operation="action",action="rotate",scroll=0}, new Request{operation="ui",uiAction="drag",pointerX=0.5,pointerY=0.5},
-            new Request{operation="ui",uiAction="click",pointerX=0.5}, new Request{operation="ui",uiAction="scroll",pointerX=0.5,pointerY=0.5},
-            new Request{operation="ui",uiAction="click",pointerX=0.5,pointerY=1.1}
+            new Request{operation="action",action="rotate",scroll=0}, new Request{operation="ui",uiAction="drag",target=Guid.NewGuid().ToString()},
+            new Request{operation="ui",uiAction="click",target=null}, new Request{operation="ui",uiAction="scroll",target=Guid.NewGuid().ToString()},
+            new Request{operation="ui",uiAction="click",target="bad"}
         }) {r.id=Guid.NewGuid().ToString();r.token=new string('a',64);Reject(()=>Protocol.Decode(Protocol.Encode(r)));}
         using(var controls=new InputController())
         {
@@ -116,6 +116,7 @@ static class InputTests
         PlayerController.HasInputDelay=false;
         Player.m_localPlayer.View.Owner=false;Assert(!Execute(Input()).ok,"Non-owned player control accepted");Player.m_localPlayer.View.Owner=true;
         Console.Visible=true;Assert(!Execute(Input()).ok,"Console control accepted");Console.Visible=false;
+        Execute(new Request{operation="action",action="menu"});Assert(Menu.Visible,"Native pause menu did not open");
         Menu.Visible=true;Assert(!Execute(Input()).ok,"Menu control accepted");Menu.Visible=false;
         TextInput.Visible=true;Assert(!Execute(Input()).ok,"Text field control accepted");TextInput.Visible=false;
         Chat.instance=new Chat{Focus=true};Assert(!Execute(Input()).ok,"Chat control accepted");Chat.instance=null;
@@ -193,19 +194,5 @@ static class InputTests
         GameInput.Prefix(player,ref move,ref attack,ref attackHold,ref secondary,ref secondaryHold,ref block,ref blockHold,ref jump,ref crouch,ref run,ref autoRun,ref dodge);
         return(new ControlFrame{X=move.x,Z=move.z,Attack=attack,AttackHold=attackHold,Secondary=secondary,SecondaryHold=secondaryHold,Block=block,BlockHold=blockHold,Jump=jump,Crouch=crouch,Run=run,Dodge=dodge},autoRun);
     }
-    static void CheckUi()
-    {
-        EventSystem.current=new EventSystem();var target=new GameObject();target.Components[typeof(Canvas)]=new Canvas();
-        EventSystem.current.Hits.Add(new RaycastResult{gameObject=target});
-        var events=new List<string>();
-        foreach(var type in new[]{typeof(IPointerClickHandler),typeof(IPointerDownHandler),typeof(IPointerUpHandler),typeof(IScrollHandler)})
-            target.Handlers[type]=d=>events.Add(type.Name);
-        PointerEventData received=null;target.Handlers[typeof(IPointerClickHandler)]=d=>{received=(PointerEventData)d;events.Add("click");};
-        Request R(string a)=>new(){operation="ui",uiAction=a,pointerX=0.2,pointerY=0.3};
-        GameUi.Execute(R("click"));Assert(events.SequenceEqual(new[]{"IPointerDownHandler","IPointerUpHandler","click"}),"UI click order incorrect");
-        Assert(Math.Abs(received.position.x-319.8)<0.1 && Math.Abs(received.position.y-629.3)<0.1,"UI top-left coordinate conversion incorrect");
-        events.Clear(); var scroll=R("scroll");scroll.scroll=1;GameUi.Execute(scroll);
-        Assert(events.SequenceEqual(new[]{"IScrollHandler"}),"UI scroll was not dispatched internally");
-        EventSystem.current.Hits.Clear();Reject(()=>GameUi.Execute(R("click")));EventSystem.current=null;
-    }
+    static void CheckUi() => UiTests.Run();
 }

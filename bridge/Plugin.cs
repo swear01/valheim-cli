@@ -9,7 +9,7 @@ using HarmonyLib;
 
 namespace ValheimCliBridge
 {
-    [BepInPlugin("swear01.ValheimCliBridge", "Valheim CLI Bridge", "0.2.0")]
+    [BepInPlugin("swear01.ValheimCliBridge", "Valheim CLI Bridge", "0.3.0")]
     public sealed class Plugin : BaseUnityPlugin
     {
         private Dispatcher dispatcher;
@@ -31,7 +31,7 @@ namespace ValheimCliBridge
             var enabled = Config.Bind("Bridge", "Enabled", true, "Enable local CLI bridge. Restart after changes.");
             var port = Config.Bind("Bridge", "Port", 28761, new ConfigDescription("Local loopback port. Restart after changes.", new AcceptableValueRange<int>(1024, 65535)));
             allowTeleport = Config.Bind("Permissions", "AllowTeleport", false, "Allow the local host to teleport their own character. Client writes are refused.");
-            allowControl = Config.Bind("Permissions", "AllowControl", false, "Allow bounded game-internal actions for your local character, including joining clients. Requires game focus. F12 revokes permission. Never enable while someone else is playing this character.");
+            allowControl = Config.Bind("Permissions", "AllowControl", false, "Allow bounded game-internal actions for your local character, including joining clients, and menu UI. Requires game focus. F12 revokes permission. Never enable while someone else is playing this character.");
             if (!enabled.Value) return;
             try
             {
@@ -67,6 +67,10 @@ namespace ValheimCliBridge
             local != null && ZNet.instance != null && !local.IsDead() && !local.IsTeleporting() &&
             !local.InCutscene() && local.GetComponent<ZNetView>() != null && local.GetComponent<ZNetView>().IsOwner() &&
             !Console.IsVisible() && (Chat.instance == null || !Chat.instance.HasFocus()) && !Menu.IsVisible() && !TextInput.IsVisible() && !Minimap.InTextInput();
+        private bool CanUseUi(Player local) => controlReady && allowControl != null && allowControl.Value && Application.isFocused &&
+            !Console.IsVisible() && (Chat.instance == null || !Chat.instance.HasFocus()) &&
+            (local == null ? FejdStartup.instance != null : ZNet.instance != null && !local.IsTeleporting() &&
+                local.GetComponent<ZNetView>() != null && local.GetComponent<ZNetView>().IsOwner());
         private static bool CanMove(Player local) => !InventoryGui.IsVisible() && !StoreGui.IsVisible() && !Minimap.IsOpen() &&
             !Hud.IsPieceSelectionVisible() && !GameCamera.InFreeFly() && !PlayerCustomizaton.IsBarberGuiVisible() && !Hud.InRadial() && GameInput.CanTakeInput(local);
         internal ControlFrame ControlFrame(Player local)
@@ -87,8 +91,10 @@ namespace ValheimCliBridge
                 input.Stop("player_changed");
                 controlledPlayer = Player.m_localPlayer;
                 appliedControl = false;
+                GameUi.Invalidate();
             }
-            input?.Permit(CanControl(Player.m_localPlayer));
+            if (input != null && input.Active && (!CanControl(Player.m_localPlayer) || !CanMove(Player.m_localPlayer))) input.Stop("game_input_blocked");
+            input?.Permit(CanControl(Player.m_localPlayer) || CanUseUi(Player.m_localPlayer));
             dispatcher?.Pump();
         }
         private void OnApplicationFocus(bool focused) { if (!focused) input?.Stop("focus_lost"); }
@@ -113,7 +119,7 @@ namespace ValheimCliBridge
             var net = ZNet.instance;
             var response = new Response
             {
-                id = request.id, ok = true, state = "observed", version = "0.2.0",
+                id = request.id, ok = true, state = "observed", version = "0.3.0",
                 inWorld = local != null && net != null,
                 host = net != null && net.IsServer(),
                 teleportAllowed = net != null && net.IsServer() && allowTeleport.Value,
@@ -121,7 +127,7 @@ namespace ValheimCliBridge
                 player = local != null ? local.GetPlayerName() : null,
                 position = local != null ? PositionOf(local.transform.position) : null,
                 teleporting = local != null && local.IsTeleporting(),
-                controlAllowed = CanControl(local), foreground = Application.isFocused,
+                controlAllowed = CanControl(local), uiAllowed = CanUseUi(local), foreground = Application.isFocused,
                 inputActive = input != null && input.Active, inputState = input?.Reason, inputId = input?.Id,
                 dead = local != null && local.IsDead(),
                 health = local != null ? local.GetHealth() : 0, maxHealth = local != null ? local.GetMaxHealth() : 0,
@@ -130,15 +136,14 @@ namespace ValheimCliBridge
             };
             if (request.operation == "stop")
                 return StopInput(request.id);
+            if (request.operation == "ui-list") GameUi.List(response, request.offset ?? 0);
             if (request.IsControl)
             {
-                if (!CanControl(local) || input == null) return Response.Error(request.id, "Requires local player ownership, game focus, AllowControl=true, and no menu/chat/console/text input", "cancelled");
+                if (!(request.operation == "ui" ? CanUseUi(local) : CanControl(local)) || input == null) return Response.Error(request.id, "Requires AllowControl=true, game focus, no console/chat, and owned player or startup UI", "cancelled");
                 if ((request.operation == "input" || request.operation == "look" || request.operation == "action" && request.action != "inventory" && request.action != "build-menu") && !CanMove(local))
                     return Response.Error(request.id, "Game controller input is blocked; close blocking UI first", "cancelled");
                 if (request.operation == "action" && request.action != "inventory" && !(request.action == "build-menu" && Hud.IsPieceSelectionVisible()) && !GameActions.CanTakeInput(local))
                     return Response.Error(request.id, "Game player input is blocked", "cancelled");
-                if (request.operation == "ui" && !InventoryGui.IsVisible() && !StoreGui.IsVisible() && !Hud.IsPieceSelectionVisible())
-                    return Response.Error(request.id, "Open a game UI first", "cancelled");
                 if ((request.operation == "action" || request.operation == "ui") && input.Active)
                     return Response.Error(request.id, "Stop movement/combat before a UI or discrete action", "cancelled");
                 input.Permit(true);
@@ -156,8 +161,7 @@ namespace ValheimCliBridge
             }
             if (request.operation == "observe")
             {
-                if (!response.inWorld) return Response.Error(request.id, "No local player in world", "cancelled");
-                response.inventory = local.GetInventory().GetAllItems().Where(item => item != null).Take(512).Select(item => new InventoryItem
+                response.inventory = local == null ? new InventoryItem[0] : local.GetInventory().GetAllItems().Where(item => item != null).Take(512).Select(item => new InventoryItem
                 {
                     name = item.m_shared.m_name, count = item.m_stack, quality = item.m_quality,
                     column = item.m_gridPos.x, row = item.m_gridPos.y, equipped = item.m_equipped
@@ -210,7 +214,7 @@ namespace ValheimCliBridge
             var previous = RenderTexture.active;
             try
             {
-                if (Player.m_localPlayer != expectedPlayer || expectedPlayer == null) yield break;
+                if (Player.m_localPlayer != expectedPlayer) yield break;
                 source = ScreenCapture.CaptureScreenshotAsTexture();
                 var scale = Math.Min(1f, Math.Min(1280f / source.width, 720f / source.height));
                 imageWidth = Math.Max(1, (int)(source.width * scale)); imageHeight = Math.Max(1, (int)(source.height * scale));

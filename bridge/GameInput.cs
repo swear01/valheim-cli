@@ -66,6 +66,9 @@ namespace ValheimCliBridge
                 case "slot":
                     if (local.GetInventory().GetItemAt(r.slot.Value - 1, 0) == null) throw new ActionRefusedException("Hotbar slot is empty");
                     local.UseHotbarItem(r.slot.Value); break;
+                case "menu":
+                    if (Menu.instance == null) throw new ActionRefusedException("Pause menu unavailable");
+                    Menu.instance.Show(); break;
                 case "inventory":
                     if (InventoryGui.instance == null) throw new ActionRefusedException("Inventory UI unavailable");
                     if (InventoryGui.IsVisible()) InventoryGui.instance.Hide(); else InventoryGui.instance.Show(null); break;

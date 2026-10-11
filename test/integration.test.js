@@ -23,7 +23,7 @@ test('Node CLI client talks to production C# transport and dispatcher', async ()
     const port = await Promise.race([ready, new Promise((_, reject) => setTimeout(() => reject(new Error('Bridge startup timeout')), 10000).unref())]);
     const status = await request({ port, token: 'a'.repeat(64), operation: 'status' });
     assert.equal(status.state, 'observed');
-    assert.equal(status.version, '0.2.0');
+    assert.equal(status.version, '0.3.0');
     const players = await request({ port, token: 'a'.repeat(64), operation: 'players' });
     assert.deepEqual(players.players, ['fixture-player']);
     await assert.rejects(request({ port, token: 'b'.repeat(64), operation: 'status' }), /Unauthorized/);
@@ -50,7 +50,7 @@ test('Node CLI client talks to production C# transport and dispatcher', async ()
     for (const action of [
       { operation: 'look', yaw: 30, pitch: -10 },
       { operation: 'action', action: 'slot', slot: 1 },
-      { operation: 'ui', uiAction: 'click', pointerX: 0.2, pointerY: 0.4 }
+      { operation: 'ui', uiAction: 'click', target: '00000000-0000-0000-0000-000000000001' }
     ]) {
       const write = { port, token: 'a'.repeat(64), ...action, id: randomUUID() };
       assert.equal((await request(write)).state, 'started');

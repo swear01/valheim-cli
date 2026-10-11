@@ -31,8 +31,8 @@ namespace ValheimCliBridge
         [DataMember(EmitDefaultValue = false)] public string uiAction;
         [DataMember(EmitDefaultValue = false)] public string button;
         [DataMember(EmitDefaultValue = false)] public int? scroll;
-        [DataMember(EmitDefaultValue = false)] public double? pointerX;
-        [DataMember(EmitDefaultValue = false)] public double? pointerY;
+        [DataMember(EmitDefaultValue = false)] public string target;
+        [DataMember(EmitDefaultValue = false)] public int? offset;
         internal long? controlEpoch;
         public bool IsControl => operation == "input" || operation == "look" || operation == "action" || operation == "ui";
         public bool IsWrite => operation == "teleport" || IsControl;
@@ -41,7 +41,7 @@ namespace ValheimCliBridge
         {
             if (!Guid.TryParseExact(id, "D", out _) || token == null || token.Length != 64)
                 throw new InvalidDataException("Invalid request schema");
-            if (operation != "status" && operation != "players" && operation != "teleport" && operation != "observe" && !IsControl && operation != "stop")
+            if (operation != "status" && operation != "players" && operation != "teleport" && operation != "observe" && operation != "ui-list" && !IsControl && operation != "stop")
                 throw new InvalidDataException("Unknown operation");
             if (operation == "teleport")
             {
@@ -60,7 +60,7 @@ namespace ValheimCliBridge
             else if (yaw.HasValue || pitch.HasValue) throw new InvalidDataException("Unexpected look fields");
             if (operation == "action")
             {
-                if (action != "interact" && action != "slot" && action != "inventory" && action != "build-menu" && action != "hide" && action != "guardian" && action != "place" && action != "rotate")
+                if (action != "menu" && action != "interact" && action != "slot" && action != "inventory" && action != "build-menu" && action != "hide" && action != "guardian" && action != "place" && action != "rotate")
                     throw new InvalidDataException("Unknown game action");
                 if (action == "slot" ? !slot.HasValue || slot < 1 || slot > 8 : slot.HasValue) throw new InvalidDataException("Slot requires 1..8 and only applies to the slot action");
                 if (action == "rotate" ? !scroll.HasValue || scroll == 0 || Math.Abs((long)scroll.Value) > 10 : scroll.HasValue) throw new InvalidDataException("Rotate requires nonzero scroll in -10..10");
@@ -69,13 +69,26 @@ namespace ValheimCliBridge
             if (operation == "ui")
             {
                 if (uiAction != "click" && uiAction != "scroll") throw new InvalidDataException("Unknown UI action");
-                if (!pointerX.HasValue || !pointerY.HasValue || !Finite(pointerX) || !Finite(pointerY) || pointerX < 0 || pointerX > 1 || pointerY < 0 || pointerY > 1) throw new InvalidDataException("UI requires normalized pointer x/y in 0..1");
+                if (!Guid.TryParseExact(target, "D", out _)) throw new InvalidDataException("UI requires a target ID from ui-list");
                 if (button != null && button != "left" && button != "right" && button != "middle") throw new InvalidDataException("Unknown UI button");
                 if (uiAction == "scroll" ? !scroll.HasValue || scroll == 0 || Math.Abs((long)scroll.Value) > 10 : scroll.HasValue) throw new InvalidDataException("Scroll requires nonzero -10..10");
             }
-            else if (uiAction != null || button != null || pointerX.HasValue || pointerY.HasValue || operation != "action" && scroll.HasValue) throw new InvalidDataException("Unexpected UI fields");
+            if (operation == "ui-list" ? offset.HasValue && (offset < 0 || offset > 100000) : offset.HasValue) throw new InvalidDataException("Offset only applies to ui-list and must be 0..100000");
+            if (operation != "ui" && (uiAction != null || button != null || target != null || operation != "action" && scroll.HasValue)) throw new InvalidDataException("Unexpected UI fields");
         }
         private static bool Finite(double? value) => value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value);
+    }
+
+    [DataContract]
+    public sealed class UiControl
+    {
+        [DataMember] public string id;
+        [DataMember] public string path;
+        [DataMember] public string label;
+        [DataMember] public string type;
+        [DataMember] public string[] actions;
+        [DataMember] public bool interactable;
+        [DataMember(EmitDefaultValue = false)] public string reason;
     }
 
     [DataContract]
@@ -110,6 +123,10 @@ namespace ValheimCliBridge
         [DataMember] public bool teleportAllowed;
         [DataMember] public bool teleporting;
         [DataMember] public bool controlAllowed;
+        [DataMember] public bool uiAllowed;
+        [DataMember(EmitDefaultValue = false)] public UiControl[] ui;
+        [DataMember] public int uiTotal;
+        [DataMember(EmitDefaultValue = false)] public int? uiNextOffset;
         [DataMember] public bool inputActive;
         [DataMember(EmitDefaultValue = false)] public string inputState;
         [DataMember(EmitDefaultValue = false)] public string inputId;
@@ -156,8 +173,8 @@ namespace ValheimCliBridge
                 while (reader.Read())
                 {
                     if (reader.NodeType != XmlNodeType.Element) continue;
-                    var textField = reader.Name == "id" || reader.Name == "token" || reader.Name == "operation" || reader.Name == "actions" || reader.Name == "action" || reader.Name == "uiAction" || reader.Name == "button";
-                    var numberField = reader.Name == "x" || reader.Name == "y" || reader.Name == "z" || reader.Name == "durationMs" || reader.Name == "moveX" || reader.Name == "moveZ" || reader.Name == "yaw" || reader.Name == "pitch" || reader.Name == "slot" || reader.Name == "scroll" || reader.Name == "pointerX" || reader.Name == "pointerY";
+                    var textField = reader.Name == "id" || reader.Name == "token" || reader.Name == "operation" || reader.Name == "actions" || reader.Name == "action" || reader.Name == "uiAction" || reader.Name == "button" || reader.Name == "target";
+                    var numberField = reader.Name == "x" || reader.Name == "y" || reader.Name == "z" || reader.Name == "durationMs" || reader.Name == "moveX" || reader.Name == "moveZ" || reader.Name == "yaw" || reader.Name == "pitch" || reader.Name == "slot" || reader.Name == "scroll" || reader.Name == "offset";
                     if (reader.Depth != 1 || !fields.Add(reader.Name) || (!textField && !numberField))
                         throw new InvalidDataException("Invalid request fields");
                     var kind = reader.GetAttribute("type");
@@ -193,7 +210,7 @@ namespace ValheimCliBridge
         public static void WriteFrame(Stream stream, Response response)
         {
             var bytes = Encode(response);
-            if (bytes.Length > (response.image == null ? MaxFrame : MaxObservationFrame)) throw new InvalidDataException("Response too large");
+            if (bytes.Length > (response.image == null && response.ui == null ? MaxFrame : MaxObservationFrame)) throw new InvalidDataException("Response too large");
             stream.Write(new byte[] { (byte)(bytes.Length >> 24), (byte)(bytes.Length >> 16), (byte)(bytes.Length >> 8), (byte)bytes.Length }, 0, 4);
             stream.Write(bytes, 0, bytes.Length);
         }
