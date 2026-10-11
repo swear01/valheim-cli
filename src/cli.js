@@ -20,8 +20,8 @@ valheim console --profile <folder> --command "help" --confirm
 valheim stop --profile <folder>
 valheim teleport <x> <y> <z> --profile <folder> --confirm [--request-id <UUID>]
 Game-internal controls only. No OS keyboard/mouse injection. Console calls native TryRunCommand without typing.
-Input requires AllowControl=true + focused game. F12 revokes control and console access.
-Console requires AllowConsole=true + focused game + enabled game console; native restrictions apply.
+Input requires AllowControl=true; background operation is supported. F12 in the game revokes control and console access.
+Console requires AllowConsole=true + enabled game console; native restrictions apply.
 Movement is relative to player look. Input lasts 50..5000 ms; poll status and observe.
 Look takes degree deltas: positive yaw turns right, positive pitch looks down.
 UI coordinates start at top left. UI events are dispatched inside the game.

@@ -48,18 +48,23 @@ AllowControl = true
 AllowTeleport = false
 ```
 
-Control requires ownership of the local, living character, a focused game and no
+Control requires ownership of the local, living character and no
 system menu, chat, console, text input, cutscene or teleport. It works for the host
 or a joining player without OP. Movement/combat/look are blocked while inventory,
 map, store, build selector or other blocking UI is open. UI commands require an
 open inventory, store or build selector. Settings permission changes apply on the
-next game update; Enabled / Port changes need a restart. Keep the game focused
-and do not control the same character concurrently.
+next game update; Enabled / Port changes need a restart. The bridge enables Unity
+background execution while loaded. Commands do not
+activate the game window or move the OS pointer. While unfocused, native cursor
+locking/hiding is suppressed; foreground cursor behavior remains native. Do not
+control the same character concurrently.
 
-**F12 cancels actions and revokes AllowControl and AllowConsole.** Re-enable it manually to resume.
+**F12 while the game is focused cancels actions and revokes AllowControl and AllowConsole.**
+Re-enable permissions manually to resume.
 `valheim stop` cancels the managed control lease without revoking permission. It
 is authenticated, bypasses Unity's request queue, and requires neither permission
-nor a host role. The next game control tick receives a neutral frame, then normal
+nor a host role or game focus. The next game control tick receives a neutral
+frame, then normal
 human input resumes. The independent 20 ms watchdog expires leases even when the
 main thread stalls, but game state cannot update until that thread resumes.
 
@@ -82,7 +87,9 @@ currently loaded player objects, not the complete remote server roster.
 
 `observe` adds item name tokens, stacks, quality, equipped state, zero-based grid
 positions and a game-only screenshot captured after rendering. Images fit within
-1280×720 while retaining aspect ratio. `capturedAt` is the image's UTC capture
+1280×720 while retaining aspect ratio. A minimized window may stop rendering;
+background execution does not guarantee screenshots while minimized.
+`capturedAt` is the image's UTC capture
 time; state is queried separately. Images may be reused for at most 500 ms and
 are invalidated by actions/teleport. The CLI polls pending screenshot reads, never
 writes. `--image` saves a new PNG without overwriting files. JSON contains its
@@ -230,7 +237,7 @@ npm pack
 
 CI runs on Windows/Linux. Tests cover the production protocol, dispatcher, replay
 protection, Node-to-C# TCP, lease expiry, edge/hold actions, hook arguments, local
-ownership, focus/UI guards, stop epochs, game-action calls, UI events and screenshot
+ownership, background/UI guards, stop epochs, game-action calls, UI events and screenshot
 cleanup. Game/UI/Harmony fixtures do not execute real runtime patches or render
 real pixels. New controls, screenshots, multiplayer and long sessions require
 the dedicated test-world checklist.

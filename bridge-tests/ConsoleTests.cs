@@ -39,7 +39,9 @@ static class ConsoleTests
             UnityEngine.Application.isFocused = true;
             Assert(!Execute().ok && calls == 0, "Default-disabled console executed");
             permission.Value = true; UnityEngine.Application.isFocused = false;
-            Assert(!Execute().ok && calls == 0, "Unfocused console executed");
+            var background = Execute();
+            Assert(background.ok && background.consoleAllowed && !background.foreground && calls == 1, "Background native console refused");
+            calls = 0;
             UnityEngine.Application.isFocused = true; Console.instance.Enabled = false;
             Assert(!Execute().ok && calls == 0, "Disabled native console executed");
             Console.instance.Enabled = true;
@@ -65,10 +67,14 @@ static class ConsoleTests
             Assert(response.state == "submitted" && response.consoleOutput.Length == 1, "Prior output leaked or native refusal misreported as applied");
             var control = new BepInEx.Configuration.ConfigEntry<bool>(true); Set("allowControl", control);
             UnityEngine.Input.Panic = true;
+            UnityEngine.Application.isFocused = false;
+            typeof(Plugin).GetMethod("Update", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(plugin, null);
+            Assert(permission.Value && control.Value, "Background F12 revoked game permissions");
+            UnityEngine.Application.isFocused = true;
             typeof(Plugin).GetMethod("Update", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(plugin, null);
             Assert(!permission.Value && !control.Value, "F12 did not revoke both permissions");
         }
         finally { Console.instance = previousConsole; UnityEngine.Application.isFocused = previousFocus; UnityEngine.Input.Panic = false; }
-        System.Console.WriteLine("PASS: console schema, native flags, permissions/focus/F12, bounded per-call output and exception cleanup (fixtures)");
+        System.Console.WriteLine("PASS: console schema, native flags, permissions/background/F12, bounded per-call output and exception cleanup (fixtures)");
     }
 }

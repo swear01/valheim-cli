@@ -6,7 +6,15 @@ namespace UnityEngine
     public sealed class Transform { public Vector3 position, eulerAngles; public Quaternion rotation; }
     public static class Time { public static float realtimeSinceStartup, time, deltaTime = 0.02f; }
     public struct Vector2 { public float x, y; public Vector2(float x, float y) { this.x=x; this.y=y; } public static Vector2 operator -(Vector2 a, Vector2 b) => new(a.x-b.x,a.y-b.y); }
-    public static class Application { public static bool isFocused = true; }
+    public static class Application { public static bool isFocused = true, runInBackground; }
+    public enum CursorLockMode { None, Locked, Confined }
+    public static class Cursor
+    {
+        private static CursorLockMode mode; private static bool shown = true;
+        public static int LockWrites, VisibilityWrites;
+        public static CursorLockMode lockState { get => mode; set { mode=value; LockWrites++; } }
+        public static bool visible { get => shown; set { shown=value; VisibilityWrites++; } }
+    }
     public enum KeyCode { F12 }
     public static class Input { public static bool Panic; public static bool GetKey(KeyCode key) => Panic; }
     public static class Screen { public static int width = 1600, height = 900; }
@@ -50,7 +58,7 @@ namespace BepInEx.Configuration
     public sealed class ConfigEntry<T> { public T Value; public ConfigEntry(T value) { Value = value; } }
     public sealed class ConfigDescription { public ConfigDescription(string description, object range) { } }
     public sealed class AcceptableValueRange<T> { public AcceptableValueRange(T min, T max) { } }
-    public sealed class ConfigFile { public ConfigEntry<T> Bind<T>(string group, string key, T value, object description) => new ConfigEntry<T>(value); }
+    public sealed class ConfigFile { public ConfigEntry<T> Bind<T>(string group, string key, T value, object description) => new ConfigEntry<T>(key == "Port" ? (T)(object)0 : value); }
 }
 namespace BepInEx
 {
@@ -64,7 +72,7 @@ namespace BepInEx
         public void StartCoroutine(System.Collections.IEnumerator routine) { Coroutines.Add(routine); }
         public void Destroy(object value) { Destroyed.Add(value); }
     }
-    public static class Paths { public static string ConfigPath => Path.GetTempPath(); }
+    public static class Paths { public static string ConfigPath = Path.GetTempPath(); }
 }
 public sealed class ZNet
 {
@@ -172,11 +180,17 @@ public sealed class Hud
 }
 namespace HarmonyLib
 {
-    [AttributeUsage(AttributeTargets.Class)] public sealed class HarmonyPatch : Attribute { public HarmonyPatch(Type type, string method) { } public HarmonyPatch(Type type, string method, Type[] arguments) { } }
+    public sealed class CodeInstruction
+    {
+        public System.Reflection.Emit.OpCode opcode; public object operand;
+        public CodeInstruction(System.Reflection.Emit.OpCode opcode, object operand = null) { this.opcode=opcode; this.operand=operand; }
+    }
+    [AttributeUsage(AttributeTargets.Class)] public sealed class HarmonyPatch : Attribute { public HarmonyPatch() { } public HarmonyPatch(Type type, string method) { } public HarmonyPatch(Type type, string method, Type[] arguments) { } }
     public sealed class Harmony { public Harmony(string id) { } public void PatchAll(System.Reflection.Assembly assembly) { } public void UnpatchSelf() { } }
     public static class AccessTools
     {
-        public static System.Reflection.MethodInfo Method(Type t, string name, Type[] parameters) => t.GetMethod(name, System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic, null, parameters, null);
+        public static string MissingTarget;
+        public static System.Reflection.MethodInfo Method(Type t, string name, Type[] parameters = null) => name == MissingTarget ? null : parameters == null ? t.GetMethod(name, System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic) : t.GetMethod(name, System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic, null, parameters, null);
         public static System.Reflection.FieldInfo Field(Type t, string name) => t.GetField(name,System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic);
     }
 }
@@ -216,3 +230,5 @@ namespace UnityEngine.EventSystems
         public static GameObject ExecuteHierarchy<T>(GameObject target, BaseEventData data,EventFunction<T> handler) => Execute(target,data,handler) ? target : null;
     }
 }
+
+public static class ZCursor { public static UnityEngine.CursorLockMode LockState { get; set; } private static void SetVisible(bool newVisible) { } }
