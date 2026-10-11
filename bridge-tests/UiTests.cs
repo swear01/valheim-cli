@@ -19,6 +19,7 @@ static class UiTests
         UnityEngine.Object.Objects.Clear(); EventSystem.current = new();
         var o = new GameObject { name = "mod-added-button" };
         Attach(o, new Canvas()); var b = Attach(o, new Button()); var label = Attach(o, new Text { text = "Mod action" });
+        o.Components[typeof(Component)] = null;
         EventSystem.current.Hits.Add(new() { gameObject = o });
         var clicks = 0; b.Click = () => clicks++;
         foreach(var offset in new[]{-1,100001})
@@ -27,12 +28,16 @@ static class UiTests
             try{invalid.Validate();throw new Exception("Bad offset accepted");}catch(System.IO.InvalidDataException){}
         }
         var field = new GameObject(); Attach(field,new Canvas()); Attach(field,new InputField());
+        label.enabled=false; Assert(List().ui.Single().label=="","Hidden text leaked into UI label"); label.enabled=true;
         var first = List().ui.Single();
         Assert(first.interactable && first.label == "Mod action" && first.type.Contains("Button"), "Dynamic mod button not described");
         var r = Click(first.id); r.id = Guid.NewGuid().ToString(); r.token = new string('a',64);
         Assert(Protocol.Decode(Protocol.Encode(r)).target == first.id, "UI target schema failed");
         GameUi.Execute(r); Assert(clicks == 1, "Native submit did not invoke button listener");
         Refused(() => GameUi.Execute(r)); Assert(clicks == 1, "Consumed UI ID replayed");
+        var duplicate=new GameObject { name=o.name }; duplicate.transform.SiblingIndex=1;
+        Attach(duplicate,new Canvas()); Attach(duplicate,new Button());
+        Assert(List().ui.Select(c=>c.path).Distinct().Count()==2,"Repeated button names have ambiguous hierarchy paths"); duplicate.activeInHierarchy=false;
         r = Click(List().ui.Single().id); b.interactable = false;
         Refused(() => GameUi.Execute(r)); Assert(List().ui.Single().reason == "disabled", "Disabled button bypassed");
         b.interactable = true; r = Click(List().ui.Single().id); label.text = "Delete world";

@@ -45,12 +45,12 @@ namespace ValheimCliBridge
             var actions = new List<string>();
             if (components.Any(c => Supported(c) && (c is IPointerClickHandler || c is ISubmitHandler))) actions.Add("click");
             if (components.Any(c => c is IScrollHandler)) actions.Add("scroll");
-            var path = o.name;
-            for (var parent = o.transform.parent; parent != null; parent = parent.parent) path = parent.name + "/" + path;
+            var path = o.name + "[" + o.transform.GetSiblingIndex() + "]";
+            for (var parent = o.transform.parent; parent != null; parent = parent.parent) path = parent.name + "[" + parent.GetSiblingIndex() + "]/" + path;
             // shortcut: IMGUI/UI Toolkit controls need a separate adapter if a profile uses them.
-            var label = string.Join(" ", o.GetComponentsInChildren<Component>()
-                .Where(c => c is Text || c.GetType().FullName == "TMPro.TextMeshProUGUI")
-                .Select(c => c is Text text ? text.text : c.GetType().GetProperty("text").GetValue(c, null) as string)
+            var label = string.Join(" ", o.GetComponentsInChildren<MonoBehaviour>()
+                .Where(c => c != null && c.isActiveAndEnabled && (c is Text || c.GetType().FullName == "TMPro.TextMeshProUGUI"))
+                .Select(c => c is Text text ? text.text : c.GetType().GetProperty("text")?.GetValue(c, null) as string)
                 .Where(s => !string.IsNullOrWhiteSpace(s)).Take(8));
             var visible = AvailablePoint(o, out _, out _);
             var enabled = selectable == null || selectable.IsInteractable();

@@ -3,7 +3,7 @@ namespace UnityEngine
 {
     public struct Vector3 { public static Vector3 zero => new(); public float x, y, z; public Vector3(float x, float y, float z) { this.x = x; this.y = y; this.z = z; } }
     public struct Quaternion { }
-    public class Transform { public Vector3 position, eulerAngles; public Quaternion rotation; public Transform parent; public string name = "root"; public bool IsChildOf(Transform other) => parent == other || parent?.IsChildOf(other) == true; }
+    public class Transform { public Vector3 position, eulerAngles; public Quaternion rotation; public Transform parent; public int SiblingIndex; public int GetSiblingIndex() => SiblingIndex; public string name = "root"; public bool IsChildOf(Transform other) => parent == other || parent?.IsChildOf(other) == true; }
     public sealed class RectTransform : Transform { public void GetWorldCorners(Vector3[] corners) { corners[0] = new(0, 0, 0); corners[2] = new(100, 100, 0); } }
     public static class RectTransformUtility { public static Vector2 WorldToScreenPoint(Camera camera, Vector3 v) => new(v.x, v.y); }
     public class Object { public static readonly List<MonoBehaviour> Objects = new(); public static T[] FindObjectsOfType<T>() => Objects.OfType<T>().ToArray(); }
@@ -22,7 +22,7 @@ namespace UnityEngine
         public T GetComponent<T>() where T:class => Components.Values.OfType<T>().FirstOrDefault();
         public T GetComponentInParent<T>() where T:class => GetComponent<T>();
         public T[] GetComponents<T>() => Components.Values.OfType<T>().ToArray();
-        public T[] GetComponentsInChildren<T>() => GetComponents<T>();
+        public T[] GetComponentsInChildren<T>() => GetComponents<T>().Concat(Components.Values.Where(v => v == null).Select(_ => default(T))).ToArray();
         public T[] GetComponentsInParent<T>() => GetComponents<T>();
     }
     public class Component
@@ -231,5 +231,5 @@ namespace UnityEngine.UI
     }
     public sealed class InputField : Selectable, UnityEngine.EventSystems.IPointerClickHandler, UnityEngine.EventSystems.IScrollHandler { }
     public sealed class Toggle : Selectable, UnityEngine.EventSystems.IPointerClickHandler { }
-    public sealed class Text : UnityEngine.Component { public string text = "Start"; }
+    public sealed class Text : UnityEngine.MonoBehaviour { public string text = "Start"; }
 }
