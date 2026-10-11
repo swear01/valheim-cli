@@ -104,7 +104,12 @@ namespace ValheimCliBridge
             input?.Permit(CanControl(Player.m_localPlayer));
             dispatcher?.Pump();
         }
-        private void OnApplicationFocus(bool focused) { if (!focused && Instance == this) BackgroundCursor.Prefix(); }
+        private void OnApplicationFocus(bool focused)
+        {
+            if (focused || Instance != this) return;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
         private void OnDestroy()
         {
             controlReady = false;

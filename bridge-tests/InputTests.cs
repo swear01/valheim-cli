@@ -145,8 +145,10 @@ static class InputTests
         Chat.instance=new Chat{Focus=true};Assert(!Execute(Input()).ok,"Chat control accepted");Chat.instance=null;
         Player.m_localPlayer.Dead=true;Assert(!Execute(Input()).ok,"Dead control accepted");Player.m_localPlayer.Dead=false;
         InventoryGui.Visible=true;Assert(!Execute(Input()).ok,"Movement leaked into inventory");InventoryGui.Visible=false;
-        Execute(hold);Application.isFocused=false;
+        Execute(hold);UnityEngine.Cursor.lockState=CursorLockMode.Locked;UnityEngine.Cursor.visible=false;
         typeof(Plugin).GetMethod("OnApplicationFocus",flags).Invoke(plugin,new object[]{false});
+        Assert(UnityEngine.Cursor.lockState==CursorLockMode.None && UnityEngine.Cursor.visible,"Focus callback did not immediately release the cursor");
+        Application.isFocused=false;
         Assert(Hook(Player.m_localPlayer).Frame.Z==1 && controller.Active,"Focus loss cancelled native control");
         Execute(new Request{operation="stop"});
         Assert(Execute(new Request{operation="look",yaw=15}).ok && Player.m_localPlayer.Look.x==15,"Background look was refused");
