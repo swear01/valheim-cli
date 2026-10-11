@@ -156,6 +156,8 @@ static class InputTests
         Menu.Visible=true;Hook(Player.m_localPlayer);Assert(!controller.Active && !Execute(Input()).ok,"Background mode bypassed the menu guard");Menu.Visible=false;
         UnityEngine.Cursor.lockState=CursorLockMode.Locked;UnityEngine.Cursor.visible=false;
         Assert(!BackgroundCursor.Prefix() && UnityEngine.Cursor.lockState==CursorLockMode.None && UnityEngine.Cursor.visible,"Background cursor was captured");
+        var lockWrites=UnityEngine.Cursor.LockWrites;var visibilityWrites=UnityEngine.Cursor.VisibilityWrites;
+        Assert(!BackgroundCursor.Prefix() && UnityEngine.Cursor.LockWrites==lockWrites && UnityEngine.Cursor.VisibilityWrites==visibilityWrites,"Idle background update rewrote the OS cursor state");
         var targets=(IEnumerable<System.Reflection.MethodBase>)typeof(BackgroundCursor).GetMethod("TargetMethods",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic).Invoke(null,null);
         Assert(targets.Count()==2 && targets.All(m=>m!=null),"Native cursor guards missing");
         foreach(var missing in new[]{"set_LockState","SetVisible"})

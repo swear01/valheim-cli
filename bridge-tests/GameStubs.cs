@@ -8,7 +8,13 @@ namespace UnityEngine
     public struct Vector2 { public float x, y; public Vector2(float x, float y) { this.x=x; this.y=y; } public static Vector2 operator -(Vector2 a, Vector2 b) => new(a.x-b.x,a.y-b.y); }
     public static class Application { public static bool isFocused = true, runInBackground; }
     public enum CursorLockMode { None, Locked, Confined }
-    public static class Cursor { public static CursorLockMode lockState; public static bool visible = true; }
+    public static class Cursor
+    {
+        private static CursorLockMode mode; private static bool shown = true;
+        public static int LockWrites, VisibilityWrites;
+        public static CursorLockMode lockState { get => mode; set { mode=value; LockWrites++; } }
+        public static bool visible { get => shown; set { shown=value; VisibilityWrites++; } }
+    }
     public enum KeyCode { F12 }
     public static class Input { public static bool Panic; public static bool GetKey(KeyCode key) => Panic; }
     public static class Screen { public static int width = 1600, height = 900; }
