@@ -8,6 +8,21 @@ pub fn launch(_: &Path, _: &Path) -> Result<Value> {
 }
 
 #[cfg(windows)]
+fn launch_path(path: &Path) -> String {
+    use std::path::{Component, Prefix};
+    let text = path.to_string_lossy();
+    // PowerShell's filesystem provider cannot resolve Rust's verbatim drive prefix.
+    match path.components().next() {
+        Some(Component::Prefix(prefix)) => match prefix.kind() {
+            Prefix::VerbatimDisk(_) => text[4..].into(),
+            Prefix::VerbatimUNC(_, _) => format!("\\\\{}", &text[8..]),
+            _ => text.into_owned(),
+        },
+        _ => text.into_owned(),
+    }
+}
+
+#[cfg(windows)]
 pub fn launch(profile: &Path, game: &Path) -> Result<Value> {
     use base64::{Engine, engine::general_purpose::STANDARD};
     use std::{
@@ -41,8 +56,8 @@ pub fn launch(profile: &Path, game: &Path) -> Result<Value> {
     let script = format!(
         "& {{\n{}\n}} -Game '{}' -Profile '{}'",
         include_str!("../src/windows-agent-launch.ps1"),
-        game.to_string_lossy().replace('\'', "''"),
-        profile.to_string_lossy().replace('\'', "''")
+        launch_path(game).replace('\'', "''"),
+        launch_path(profile).replace('\'', "''")
     );
     let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
     let output = Command::new("powershell.exe")
@@ -66,4 +81,21 @@ pub fn launch(profile: &Path, game: &Path) -> Result<Value> {
     }
     serde_json::from_slice(&output.stdout)
         .map_err(|_| "Agent launcher returned invalid JSON".into())
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+    #[test]
+    fn verbatim_paths_keep_their_drive_or_unc_share_for_powershell() {
+        assert_eq!(
+            launch_path(Path::new(r"\\?\C:\profile ü ' $value `name")),
+            r"C:\profile ü ' $value `name"
+        );
+        assert_eq!(
+            launch_path(Path::new(r"\\?\UNC\host\share\profile")),
+            r"\\host\share\profile"
+        );
+        assert_eq!(launch_path(Path::new(r"C:\profile")), r"C:\profile");
+    }
 }
