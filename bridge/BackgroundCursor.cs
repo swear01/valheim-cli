@@ -39,7 +39,7 @@ namespace ValheimCliBridge
         }
         public static void SetLockState(CursorLockMode value)
         {
-            if (Plugin.Instance != null && !Application.isFocused)
+            if (Plugin.Instance != null && (Plugin.Instance.AgentMode || !Application.isFocused))
             {
                 value = CursorLockMode.None;
                 if (Cursor.lockState == value) return;
@@ -48,7 +48,7 @@ namespace ValheimCliBridge
         }
         public static void SetVisible(bool value)
         {
-            if (Plugin.Instance != null && !Application.isFocused)
+            if (Plugin.Instance != null && (Plugin.Instance.AgentMode || !Application.isFocused))
             {
                 value = true;
                 if (Cursor.visible == value) return;

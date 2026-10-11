@@ -5,11 +5,11 @@ The agent reads JSON state and game screenshots, then requests game actions.
 Controls and console commands run inside Valheim; no OS keyboard/mouse events, shell execution,
 LLM, autonomous bot or ValheimMCP dependency is bundled.
 
-**0.3.0 is experimental.** It adds discoverable UI targets and menu control.
-Production builds target Valheim 1.0.16 references; an additional local build
-against the actual 1.0.17 assembly passes. The previous 0.2.0 controls passed a
-short Windows 1.0.17 single-player test with 41 plugins. That does not establish
-multiplayer, long-session or full-playthrough compatibility.
+**0.4.0 is experimental.** It combines native GUI discovery with isolated Windows
+Agent startup. Short Windows Valheim 1.0.17 tests passed character/world selection,
+movement, inventory guards, Console and manual pause/resume. Production builds
+target Valheim 1.0.16 references; an additional actual 1.0.17 API build passes.
+Multiplayer, long sessions and a full playthrough remain unverified.
 
 ## Install
 
@@ -17,11 +17,11 @@ Install Node.js 22+ on the same computer as Valheim. Download the experimental C
 tarball when provided, then install it:
 
 ```sh
-npm install -g ./valheim-agent-cli-0.3.0.tgz
+npm install -g ./valheim-agent-cli-0.4.0.tgz
 valheim install --profile "C:\path\to\Gale\profile"
 ```
 
-0.3.0 is not published to npm or Thunderstore. Exit Valheim before upgrading.
+0.4.0 is not published to npm or Thunderstore. Exit Valheim before upgrading.
 The installer checks the bundled DLL hash and preserves other mods/settings. It
 refuses to overwrite a different DLL: back up/remove only that bridge first.
 For Thunderstore installation, use the mod manager instead of installing a second
@@ -55,6 +55,8 @@ map, store, build selector or other blocking UI is open. UI activation also work
 in startup and pause menus; `uiAllowed` reports its separate permission gate.
 UI discovery is an authenticated read and remains available when control permission is disabled.
 Pages are ordered by hierarchy path; rediscover after a scene or hierarchy change.
+Discovery scans active canvases and checks at most 64 targets per page; use it
+after UI changes rather than polling every frame.
 Settings permission changes apply on the next game update; Enabled / Port changes
 need a restart. The bridge enables Unity background execution while loaded.
 Commands do not activate the game window or move the OS pointer. While unfocused,
@@ -192,9 +194,9 @@ an operating loop and pending live acceptance checks.
 valheim console --profile <folder> --command "help 2 4" --confirm
 ```
 
-Enable `AllowConsole = true` separately in the bridge's Permissions settings and
-bring Valheim to the foreground. The game console must already be enabled (for
-example by launching with `-console`). The bridge does not open the console UI,
+Enable `AllowConsole = true` separately in the bridge's Permissions settings.
+Console commands also work while unfocused. The game console must already be
+enabled (for example by launching with `-console`). The bridge does not open the console UI,
 change its input field or enable cheats/admin permissions.
 
 The request runs `Console.instance.TryRunCommand(command, false, false)` on the
@@ -272,3 +274,35 @@ Sources: [Harmony argument prefixes](https://harmony.pardeike.net/articles/patch
 [Unity screenshot timing](https://docs.unity3d.com/2021.3/Documentation/ScriptReference/ScreenCapture.CaptureScreenshotAsTexture.html),
 [BepInEx plugin guide](https://docs.bepinex.dev/articles/dev_guide/plugin_tutorial/2_plugin_start.html),
 [Valheim references](https://github.com/Digitalroot-Valheim/Digitalroot.Valheim.References).
+
+## Windows Agent mode
+
+Use a separate character and world for unattended testing. After installing this
+CLI's bridge and enabling `AllowControl` in a normal launch, exit Valheim:
+
+```powershell
+valheim launch-agent --profile "C:\path\to\Gale\profile" --game "E:\SteamLibrary\steamapps\common\Valheim\valheim.exe" --confirm
+valheim status --profile "C:\path\to\Gale\profile"
+valheim ui-list --profile "C:\path\to\Gale\profile"
+```
+
+Run this command in your signed-in Windows desktop session. It refuses an existing
+Valheim process, verifies the installed bridge hash, and starts the client on a
+new Win32 desktop without switching your input desktop. The rendered GUI is
+available through `observe` and native UI commands, but is absent from your normal
+Alt+Tab list. Exit through the native Quit button after saving/logging out.
+`launched` means process creation succeeded; poll `status` for readiness.
+
+The launcher passes `--valheim-cli-agent`. This makes cursor locking/hiding stay
+suppressed even when Unity reports focus within its isolated desktop, pauses the
+game audio listener while the bridge is loaded, and retains background execution. It does
+not grant action or Console permissions. `foreground` reports **Unity focus**, not
+whether the game is on your visible Windows desktop. `agentMode`, `paused` and
+`timeScale` report the bridge mode and native simulation state. Manual menus and
+cinematics retain their native pause behavior; no automatic unpause is injected.
+
+The GUI renderer and GPU remain active. This is not a headless dedicated server.
+Ordinary launching can still take foreground before the plugin loads; use this
+launcher for desktop isolation. The launcher uses Windows desktop/process APIs;
+gameplay, Console and UI actions continue to use game methods without simulated
+OS keyboard or mouse input. Multiplayer, direct video audio and long sessions remain unverified.
