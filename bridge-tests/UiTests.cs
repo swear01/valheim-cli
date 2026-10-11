@@ -9,6 +9,7 @@ static class UiTests
 {
     static void Assert(bool value, string message) { if (!value) throw new Exception(message); }
     static void Refused(Action action) { try { action(); } catch (ActionRefusedException) { return; } throw new Exception("Unsafe UI action accepted"); }
+    sealed class ModSubmit : MonoBehaviour, ISubmitHandler { public int Calls; public void OnSubmit(BaseEventData data) { Calls++; } }
     sealed class ModClick : MonoBehaviour, IPointerClickHandler { }
     static T Attach<T>(GameObject o, T c) where T : Component { c.gameObject = o; o.Components[typeof(T)] = c; return c; }
     static Response List(int offset = 0) { var r = new Response(); GameUi.List(r, offset); return r; }
@@ -25,6 +26,7 @@ static class UiTests
             var invalid=new Request{operation="ui-list",offset=offset,id=Guid.NewGuid().ToString(),token=new string('a',64)};
             try{invalid.Validate();throw new Exception("Bad offset accepted");}catch(System.IO.InvalidDataException){}
         }
+        var field = new GameObject(); Attach(field,new Canvas()); Attach(field,new InputField());
         var first = List().ui.Single();
         Assert(first.interactable && first.label == "Mod action" && first.type.Contains("Button"), "Dynamic mod button not described");
         var r = Click(first.id); r.id = Guid.NewGuid().ToString(); r.token = new string('a',64);
@@ -50,9 +52,13 @@ static class UiTests
         UnityEngine.Object.Objects.Clear(); o = new GameObject(); Attach(o,new Canvas()); Attach(o,new ModClick());
         EventSystem.current.Hits.Clear(); EventSystem.current.Hits.Add(new(){gameObject=o});
         var events=new List<string>();
-        foreach(var type in new[]{typeof(IPointerDownHandler),typeof(IPointerUpHandler),typeof(IPointerClickHandler)}) o.Handlers[type]=_=>events.Add(type.Name);
+        foreach(var type in new[]{typeof(IPointerDownHandler),typeof(IPointerUpHandler),typeof(IPointerClickHandler)}) o.Handlers[type]=d=>{Assert(((PointerEventData)d).pointerCurrentRaycast.gameObject==o,"Native raycast context lost");events.Add(type.Name);};
         GameUi.Execute(Click(List().ui.Single().id));
         Assert(events.SequenceEqual(new[]{"IPointerDownHandler","IPointerUpHandler","IPointerClickHandler"}),"Custom UI event order changed");
+        UnityEngine.Object.Objects.Clear(); o=new GameObject(); Attach(o,new Canvas()); var submit=Attach(o,new ModSubmit());
+        EventSystem.current.Hits.Clear(); EventSystem.current.Hits.Add(new(){gameObject=o});
+        r=Click(List().ui.Single().id); r.button="right"; Refused(()=>GameUi.Execute(r));
+        r.button="left"; GameUi.Execute(r); Assert(submit.Calls==1,"Custom submit-only handler not invoked");
         var plugin = new Plugin(); using var controller = new InputController(); var flags=BindingFlags.Instance|BindingFlags.NonPublic;
         void Field(string name,object value)=>typeof(Plugin).GetField(name,flags).SetValue(plugin,value);
         Field("input",controller); Field("controlReady",true); var permission=new BepInEx.Configuration.ConfigEntry<bool>(false);

@@ -229,6 +229,7 @@ namespace UnityEngine.UI
         public Action Click;
         public void OnSubmit(UnityEngine.EventSystems.BaseEventData data) { if(isActiveAndEnabled && IsInteractable()) Click?.Invoke(); }
     }
+    public sealed class InputField : Selectable, UnityEngine.EventSystems.IPointerClickHandler, UnityEngine.EventSystems.IScrollHandler { }
     public sealed class Toggle : Selectable, UnityEngine.EventSystems.IPointerClickHandler { }
     public sealed class Text : UnityEngine.Component { public string text = "Start"; }
 }
