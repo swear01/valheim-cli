@@ -34,8 +34,8 @@ fn windowless_executable_preserves_piped_output_and_exit_codes() {
         );
     }
     let output = Command::new("cmd.exe")
-        .args(["/D", "/C"])
-        .arg(format!("\"\"{executable}\" --version\""))
+        .args(["/D", "/S", "/C"])
+        .raw_arg(format!("\"\"{executable}\" --version\""))
         .creation_flags(0x08000000)
         .output()
         .unwrap();
@@ -81,7 +81,8 @@ fn launcher_does_not_mistake_its_native_cli_for_the_game() {
     assert!(!error.contains("Valheim is already running"), "{error}");
     assert!(
         error.contains("Run launch-agent in the signed-in")
-            || error.contains("not a valid Win32 application"),
+            || error.contains("not a valid Win32 application")
+            || error.contains("not compatible with the version of Windows"),
         "{error}"
     );
 }
