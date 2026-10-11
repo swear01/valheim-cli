@@ -3,9 +3,12 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 export async function installedBridge(profile, expected) {
-  const plugins = join(profile, 'BepInEx', 'plugins');
+  const bepinex = join(profile, 'BepInEx');
+  const plugins = join(bepinex, 'plugins');
   try {
-    if ((await lstat(plugins)).isSymbolicLink()) throw new Error('Plugin paths must not contain symlinks');
+    for (const path of [bepinex, plugins]) {
+      if ((await lstat(path)).isSymbolicLink()) throw new Error('Plugin paths must not contain symlinks');
+    }
   } catch (error) {
     if (error.code === 'ENOENT') return null;
     throw error;

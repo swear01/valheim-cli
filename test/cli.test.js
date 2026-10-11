@@ -78,6 +78,11 @@ test('Standalone and manager plugin layouts reuse one verified bridge and refuse
     await writeFile(current, 'different');
     await assert.rejects(install(profile, artifact), /Different bridge/);
     await assert.rejects(installedBridge(profile, hash), /Different bridge/);
+    const movedRoot = join(root, 'linked-BepInEx-root');
+    await rename(join(profile, 'BepInEx'), movedRoot);
+    await symlink(movedRoot, join(profile, 'BepInEx'), linkType);
+    await assert.rejects(installedBridge(profile, hash), /symlinks/);
+    await assert.rejects(install(profile, artifact), /symlinks/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

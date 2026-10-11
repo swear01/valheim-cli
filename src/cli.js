@@ -107,19 +107,19 @@ export async function install(profile, artifactRoot = fileURLToPath(new URL('../
   if (createHash('sha256').update(await readFile(source)).digest('hex') !== expected) throw new Error('Bridge checksum mismatch');
   await safeDirectory(join(profile, 'BepInEx'));
   await safeDirectory(plugins);
-  const existing = await installedBridge(profile, expected);
-  if (existing) return { ok: true, state: 'installed', path: existing, version: manifest.version,
-    next: 'Restart Valheim. The plugin creates its local token; teleport is disabled by default.' };
-  const targetDir = join(plugins, 'swear01-ValheimCliBridge');
-  await safeDirectory(targetDir);
-  const target = join(targetDir, 'ValheimCliBridge.dll');
-  try {
-    await copyFile(source, target, constants.COPYFILE_EXCL);
-  } catch (error) {
-    if (error.code !== 'EEXIST') throw error;
-    if ((await lstat(target)).isSymbolicLink()) throw new Error('Existing bridge must not be a symlink');
-    if (createHash('sha256').update(await readFile(target)).digest('hex') !== expected) {
-      throw new Error('Different bridge already installed. Exit Valheim and back up/remove only this plugin before upgrading.');
+  let target = await installedBridge(profile, expected);
+  if (!target) {
+    const targetDir = join(plugins, 'swear01-ValheimCliBridge');
+    await safeDirectory(targetDir);
+    target = join(targetDir, 'ValheimCliBridge.dll');
+    try {
+      await copyFile(source, target, constants.COPYFILE_EXCL);
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      if ((await lstat(target)).isSymbolicLink()) throw new Error('Existing bridge must not be a symlink');
+      if (createHash('sha256').update(await readFile(target)).digest('hex') !== expected) {
+        throw new Error('Different bridge already installed. Exit Valheim and back up/remove only this plugin before upgrading.');
+      }
     }
   }
   return { ok: true, state: 'installed', path: target, version: manifest.version,
