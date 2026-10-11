@@ -180,6 +180,11 @@ public sealed class Hud
 }
 namespace HarmonyLib
 {
+    public sealed class CodeInstruction
+    {
+        public System.Reflection.Emit.OpCode opcode; public object operand;
+        public CodeInstruction(System.Reflection.Emit.OpCode opcode, object operand = null) { this.opcode=opcode; this.operand=operand; }
+    }
     [AttributeUsage(AttributeTargets.Class)] public sealed class HarmonyPatch : Attribute { public HarmonyPatch() { } public HarmonyPatch(Type type, string method) { } public HarmonyPatch(Type type, string method, Type[] arguments) { } }
     public sealed class Harmony { public Harmony(string id) { } public void PatchAll(System.Reflection.Assembly assembly) { } public void UnpatchSelf() { } }
     public static class AccessTools

@@ -155,9 +155,12 @@ static class InputTests
         Assert(Execute(hold).ok,"Background movement was refused");
         Menu.Visible=true;Hook(Player.m_localPlayer);Assert(!controller.Active && !Execute(Input()).ok,"Background mode bypassed the menu guard");Menu.Visible=false;
         UnityEngine.Cursor.lockState=CursorLockMode.Locked;UnityEngine.Cursor.visible=false;
-        Assert(!BackgroundCursor.Prefix() && UnityEngine.Cursor.lockState==CursorLockMode.None && UnityEngine.Cursor.visible,"Background cursor was captured");
+        BackgroundCursor.SetLockState(CursorLockMode.Locked);BackgroundCursor.SetVisible(false);
+        Assert(UnityEngine.Cursor.lockState==CursorLockMode.None && UnityEngine.Cursor.visible,"Background cursor was captured");
         var lockWrites=UnityEngine.Cursor.LockWrites;var visibilityWrites=UnityEngine.Cursor.VisibilityWrites;
-        Assert(!BackgroundCursor.Prefix() && UnityEngine.Cursor.LockWrites==lockWrites && UnityEngine.Cursor.VisibilityWrites==visibilityWrites,"Idle background update rewrote the OS cursor state");
+        BackgroundCursor.SetLockState(CursorLockMode.Locked);BackgroundCursor.SetVisible(false);
+        Assert(UnityEngine.Cursor.LockWrites==lockWrites && UnityEngine.Cursor.VisibilityWrites==visibilityWrites,"Idle background update rewrote the OS cursor state");
+        CheckCursorTranspiler();
         var targets=(IEnumerable<System.Reflection.MethodBase>)typeof(BackgroundCursor).GetMethod("TargetMethods",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic).Invoke(null,null);
         Assert(targets.Count()==2 && targets.All(m=>m!=null),"Native cursor guards missing");
         foreach(var missing in new[]{"set_LockState","SetVisible"})
@@ -168,9 +171,11 @@ static class InputTests
             finally {HarmonyLib.AccessTools.MissingTarget=null;}
         }
         Application.isFocused=true;UnityEngine.Cursor.lockState=CursorLockMode.Locked;UnityEngine.Cursor.visible=false;
-        Assert(BackgroundCursor.Prefix() && UnityEngine.Cursor.lockState==CursorLockMode.Locked && !UnityEngine.Cursor.visible,"Foreground cursor behavior changed");
+        BackgroundCursor.SetLockState(CursorLockMode.Confined);BackgroundCursor.SetVisible(true);
+        Assert(UnityEngine.Cursor.lockState==CursorLockMode.Confined && UnityEngine.Cursor.visible,"Foreground cursor behavior changed");
         Application.isFocused=false;Plugin.Instance=null;
-        Assert(BackgroundCursor.Prefix(),"Disabled bridge changed cursor behavior");Plugin.Instance=plugin;Application.isFocused=true;
+        BackgroundCursor.SetLockState(CursorLockMode.Locked);BackgroundCursor.SetVisible(false);
+        Assert(UnityEngine.Cursor.lockState==CursorLockMode.Locked && !UnityEngine.Cursor.visible,"Disabled bridge changed cursor behavior");Plugin.Instance=plugin;Application.isFocused=true;
         Execute(new Request{operation="action",action="slot",slot=1});Assert(Player.m_localPlayer.Hotbar==1,"Hotbar did not use game method");
         Execute(new Request{operation="action",action="interact"});Assert(Player.m_localPlayer.Interactions==1,"Interact did not use game method");
         Player.m_localPlayer.NativeInputAllowed=false;
@@ -235,6 +240,27 @@ static class InputTests
         Execute(hold);permission.Value=false;Execute(new Request{operation="stop"});Update();Assert(!Execute(Input()).ok,"Revoked permission accepted");
         permission.Value=true;UnityEngine.Input.Panic=true;Update();Assert(!permission.Value,"F12 failed to revoke permission");UnityEngine.Input.Panic=false;
         Plugin.Instance=null;
+    }
+    static void CheckCursorTranspiler()
+    {
+        var method=typeof(BackgroundCursor).GetMethod("Transpiler",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic);
+        HarmonyLib.CodeInstruction[] Rewrite(HarmonyLib.CodeInstruction[] code) => ((IEnumerable<HarmonyLib.CodeInstruction>)method.Invoke(null,new object[]{code})).ToArray();
+        foreach(var name in new[]{"lockState","visible"})
+        {
+            var setter=typeof(UnityEngine.Cursor).GetProperty(name).SetMethod;
+            var code=new[]{new HarmonyLib.CodeInstruction(System.Reflection.Emit.OpCodes.Ldarg_0),new HarmonyLib.CodeInstruction(System.Reflection.Emit.OpCodes.Call,setter),new HarmonyLib.CodeInstruction(System.Reflection.Emit.OpCodes.Ret)};
+            var changed=Rewrite(code);
+            Assert(changed.Length==3 && changed.Zip(code).All(pair=>ReferenceEquals(pair.First,pair.Second)),"Cursor patch changed native bookkeeping instructions");
+            var replacement=(System.Reflection.MethodInfo)changed[1].operand;
+            Assert(replacement.DeclaringType==typeof(BackgroundCursor) && replacement.GetParameters()[0].ParameterType==setter.GetParameters()[0].ParameterType,"Cursor replacement changed the native call signature");
+            var dynamicMethod=new System.Reflection.Emit.DynamicMethod("cursor_fixture",typeof(void),new[]{setter.GetParameters()[0].ParameterType},typeof(InputTests).Module,true);
+            var il=dynamicMethod.GetILGenerator();il.Emit(changed[0].opcode);il.Emit(changed[1].opcode,replacement);il.Emit(changed[2].opcode);
+            var action=dynamicMethod.CreateDelegate(typeof(Action<>).MakeGenericType(setter.GetParameters()[0].ParameterType));
+            action.DynamicInvoke(name=="lockState" ? (object)CursorLockMode.Locked : false);
+        }
+        Assert(UnityEngine.Cursor.lockState==CursorLockMode.None && UnityEngine.Cursor.visible,"Rewritten native cursor calls did not enforce background policy");
+        try {Rewrite(new[]{new HarmonyLib.CodeInstruction(System.Reflection.Emit.OpCodes.Ret)});throw new Exception("Missing native write path accepted");}
+        catch(MissingMethodException){}
     }
     static (ControlFrame Frame,bool AutoRun) Hook(Player player)
     {
