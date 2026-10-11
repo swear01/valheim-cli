@@ -4,6 +4,8 @@ $ProgressPreference='SilentlyContinue'
 try {
     $Game=(Resolve-Path -LiteralPath $Game).ProviderPath
     $Profile=(Resolve-Path -LiteralPath $Profile).ProviderPath
+    $Cli=(Resolve-Path -LiteralPath $Cli).ProviderPath
+    if([string]::Equals($Game,$Cli,[StringComparison]::OrdinalIgnoreCase)){throw 'Choose the game executable, not the CLI'}
     if([IO.Path]::GetFileName($Game) -ine 'valheim.exe'){throw 'Choose valheim.exe'}
     $preloader=Join-Path $Profile 'BepInEx\core\BepInEx.Preloader.dll'
     if(!(Test-Path -LiteralPath $preloader -PathType Leaf)){throw 'BepInEx preloader missing'}

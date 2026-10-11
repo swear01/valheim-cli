@@ -46,6 +46,16 @@ fn windowless_executable_preserves_piped_output_and_exit_codes() {
             ok
         );
     }
+    for argument in ["--version >NUL", "--invalid 2>NUL"] {
+        let output = Command::new("cmd.exe")
+            .args(["/D", "/S", "/C"])
+            .raw_arg(format!("\"\"{executable}\" {argument}\""))
+            .creation_flags(0x08000000)
+            .output()
+            .unwrap();
+        assert!(output.stdout.is_empty(), "{output:?}");
+        assert!(output.stderr.is_empty(), "{output:?}");
+    }
 }
 
 #[test]
@@ -86,5 +96,21 @@ fn launcher_does_not_mistake_its_native_cli_for_the_game() {
             || error.contains("not a valid Win32 application")
             || error.contains("not compatible with the version of Windows"),
         "{error}"
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_valheim"))
+        .args(["launch-agent", "--profile"])
+        .arg(&profile)
+        .arg("--game")
+        .arg(env!("CARGO_BIN_EXE_valheim"))
+        .arg("--confirm")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let result: Value = serde_json::from_slice(&output.stderr).unwrap();
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap()
+            .contains("Choose the game executable, not the CLI")
     );
 }

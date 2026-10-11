@@ -29,6 +29,10 @@ for an existing Valheim process, since both executables are named `valheim.exe`.
 Agents should invoke the CLI directly, capture stdout/stderr and wait for its
 process exit code. A `cmd.exe /C` wrapper can return success before a GUI
 executable finishes; its exit code is not a reliable CLI result.
+Interactive CMD and PowerShell prompts can also return early. This is the GUI
+subsystem tradeoff: the console-subsystem alternative with a detached-allocation
+manifest requires Windows 11 24H2 or later, while this CLI also supports older
+Windows. See [Microsoft's console allocation policy](https://learn.microsoft.com/en-us/windows/console/console-allocation-policy).
 No mod manager or QoL modpack is required. Download the ZIP matching your OS and
 CPU from [GitHub Releases](https://github.com/swear01/valheim-cli/releases), extract
 it, and run the executable directly or add its folder to PATH:

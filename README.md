@@ -10,7 +10,7 @@ Bring your own agent; no AI model is included.
 2. Download the CLI ZIP for **Windows x64**, **Linux x64**, or **macOS Intel / Apple Silicon** from [GitHub Releases](https://github.com/swear01/valheim-cli/releases). Extract it and run `valheim.exe` on Windows or `./valheim` on Linux/macOS. Add its folder to PATH to use the `valheim` examples below from anywhere.
 
 **No Node.js, Bun or Rust installation is needed.** The native CLI includes its bridge installer and Windows startup script. The C# mod serves game commands locally; the CLI connects to it. Both run on the game computer, independently of your mod manager or modpack.
-On Windows, the CLI does not open a console window; JSON output still works in an existing terminal or through captured pipes.
+On Windows, the CLI does not open a console window. Agents should invoke it directly, capture JSON output and wait for its process to exit; interactive shells may return early.
 Exit Valheim before upgrading, and remove the old `ValheimCliBridge` mod if installed.
 
 ## Enable control
