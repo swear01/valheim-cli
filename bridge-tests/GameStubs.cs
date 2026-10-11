@@ -124,7 +124,18 @@ public sealed class PlayerController
     public bool InputAllowed = true;
     private bool TakeInput(bool look = false) => InputAllowed;
 }
-public static class Console { public static bool Visible; public static bool IsVisible() => Visible; }
+public class Terminal
+{
+    public Action<string, bool, bool> Handler;
+    public void TryRunCommand(string text, bool silentFail = false, bool skipAllowedCheck = false) => Handler?.Invoke(text, silentFail, skipAllowedCheck);
+    public void AddString(string text) => ValheimCliBridge.GameConsole.Postfix(this, text);
+}
+public sealed class Console : Terminal
+{
+    public static Console instance; public static bool Visible; public bool Enabled = true;
+    public static bool IsVisible() => Visible;
+    public bool IsConsoleEnabled() => Enabled;
+}
 public static class Menu { public static bool Visible; public static bool IsVisible() => Visible; }
 public sealed class Chat { public static Chat instance; public bool Focus; public bool HasFocus() => Focus; }
 public sealed class Inventory
@@ -163,7 +174,7 @@ public sealed class Hud
 }
 namespace HarmonyLib
 {
-    [AttributeUsage(AttributeTargets.Class)] public sealed class HarmonyPatch : Attribute { public HarmonyPatch() { } public HarmonyPatch(Type type, string method) { } }
+    [AttributeUsage(AttributeTargets.Class)] public sealed class HarmonyPatch : Attribute { public HarmonyPatch() { } public HarmonyPatch(Type type, string method) { } public HarmonyPatch(Type type, string method, Type[] arguments) { } }
     public sealed class Harmony { public Harmony(string id) { } public void PatchAll(System.Reflection.Assembly assembly) { } public void UnpatchSelf() { } }
     public static class AccessTools
     {

@@ -2,7 +2,7 @@
 
 A local CLI and BepInEx bridge for an agent controlling **your own character**.
 The agent reads JSON state and game screenshots, then requests game actions.
-Controls run inside Valheim; no OS keyboard/mouse events, shell/console execution,
+Controls and console commands run inside Valheim; no OS keyboard/mouse events, shell execution,
 LLM, autonomous bot or ValheimMCP dependency is bundled.
 
 **0.2.0 is experimental and has not been tested in a running game.** Production
@@ -59,8 +59,8 @@ activate the game window or move the OS pointer. While unfocused, native cursor
 locking/hiding is suppressed; foreground cursor behavior remains native. Do not
 control the same character concurrently.
 
-**F12 while the game is focused cancels actions and revokes AllowControl.**
-Re-enable it manually to resume.
+**F12 while the game is focused cancels actions and revokes AllowControl and AllowConsole.**
+Re-enable permissions manually to resume.
 `valheim stop` cancels the managed control lease without revoking permission. It
 is authenticated, bypasses Unity's request queue, and requires neither permission
 nor a host role or game focus. The next game control tick receives a neutral
@@ -160,6 +160,38 @@ Inventory/workbench/build UIs provide equipment, food, crafting and construction
 There is no autonomous navigation, combat AI, semantic craft planner or proof that
 an agent can complete a playthrough. See [the agent guide](docs/agent-play.md) for
 an operating loop and pending live acceptance checks.
+
+## Native console
+
+```sh
+valheim console --profile <folder> --command "help 2 4" --confirm
+```
+
+Enable `AllowConsole = true` separately in the bridge's Permissions settings and
+bring Valheim to the foreground. The game console must already be enabled (for
+example by launching with `-console`). The bridge does not open the console UI,
+change its input field or enable cheats/admin permissions.
+
+The request runs `Console.instance.TryRunCommand(command, false, false)` on the
+Unity main thread, using the native registry/parser, context checks and mod patches.
+Commands registered by mods use the same entry point; mods watching only input-field
+submission need their own integration. The command must be a single trimmed line
+of 1–512 characters with no control characters; native argument parsing is preserved.
+
+The JSON result's `state: "submitted"` means the native parser returned, not that
+the requested effect succeeded. `consoleOutput` contains only synchronous output
+written to that console during the call, including native unknown-command or
+permission messages. Output is capped at 32 entries of 256 characters each;
+`consoleOutputTruncated` reports clipping. Delayed/server replies and logs written
+to other destinations are not captured. Verify consequential results with state
+or observation. Exceptions/timeouts have uncertain outcomes and must not be retried
+automatically; write UUIDs use the existing replay protection.
+
+`AllowConsole` grants access to all commands normally available to that local
+console, including mod commands and native teleport commands. `AllowTeleport`
+only restricts the separate typed teleport API. Native command permissions still
+apply, but mod code can define its own permissions and side effects. F12 revokes
+console permission; `stop` cancels movement, not an executing console command.
 
 ## Teleport
 
