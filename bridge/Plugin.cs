@@ -89,7 +89,7 @@ namespace ValheimCliBridge
         }
         private void Update()
         {
-            if (Input.GetKey(KeyCode.F12))
+            if (Application.isFocused && Input.GetKey(KeyCode.F12))
             {
                 if (allowControl != null) allowControl.Value = false;
                 if (allowConsole != null) allowConsole.Value = false;

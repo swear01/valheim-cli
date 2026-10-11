@@ -67,6 +67,10 @@ static class ConsoleTests
             Assert(response.state == "submitted" && response.consoleOutput.Length == 1, "Prior output leaked or native refusal misreported as applied");
             var control = new BepInEx.Configuration.ConfigEntry<bool>(true); Set("allowControl", control);
             UnityEngine.Input.Panic = true;
+            UnityEngine.Application.isFocused = false;
+            typeof(Plugin).GetMethod("Update", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(plugin, null);
+            Assert(permission.Value && control.Value, "Background F12 revoked game permissions");
+            UnityEngine.Application.isFocused = true;
             typeof(Plugin).GetMethod("Update", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(plugin, null);
             Assert(!permission.Value && !control.Value, "F12 did not revoke both permissions");
         }
