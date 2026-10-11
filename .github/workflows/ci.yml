@@ -6,23 +6,48 @@ jobs:
   check:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-x64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            platform: linux-x64
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: macos-arm64
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            platform: macos-x64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: 22
+          python-version: '3.12'
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
-      - run: npm run test:bridge
-      - run: npm test
-      - run: npm run build:bridge
-      - run: npm run pack:bridge
-      - run: npm pack
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: rustfmt, clippy
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: python scripts/prepare-bridge.py
+      - run: dotnet run --project bridge-tests -c Release
+      - run: dotnet build bridge -c Release
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets --target ${{ matrix.target }} -- -D warnings
+      - run: cargo test --locked --target ${{ matrix.target }}
+      - run: cargo test --locked --target ${{ matrix.target }} --test csharp -- --ignored
+      - run: cargo build --locked --release --target ${{ matrix.target }}
+      - run: python scripts/package-cli.py ${{ matrix.target }} ${{ matrix.platform }}
       - uses: actions/upload-artifact@v4
         with:
-          name: package-${{ matrix.os }}
-          path: valheim-agent-cli-*.tgz
+          name: cli-${{ matrix.platform }}
+          path: dist/*
