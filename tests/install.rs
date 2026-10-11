@@ -147,6 +147,8 @@ fn linked_dll_and_unreadable_subfolders_cannot_hide_an_existing_bridge() {
     fs::set_permissions(&external, fs::Permissions::from_mode(0o700)).unwrap();
     if inaccessible {
         assert!(result.is_err());
+    } else {
+        assert!(result.is_ok());
     }
     assert!(
         !plugins

@@ -4,7 +4,6 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -129,12 +128,8 @@ pub fn install(profile: &Path, dll: &[u8], manifest: &[u8]) -> Result<Value> {
             let directory = plugins.join("swear01-ValheimCliBridge");
             safe_directory(&directory)?;
             let target = directory.join("ValheimCliBridge.dll");
-            match fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&target)
-            {
-                Ok(mut file) => file.write_all(dll).map_err(|e| e.to_string())?,
+            match crate::write_new(&target, dll) {
+                Ok(()) => (),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                     if linked(&fs::symlink_metadata(&target).map_err(|e| e.to_string())?) {
                         return Err("Existing bridge must not be a symlink".into());

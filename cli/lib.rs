@@ -7,6 +7,20 @@ use serde_json::{Map, Value, json};
 use std::{collections::HashSet, fs, io::Write, path::PathBuf, thread, time::Duration};
 
 pub type Result<T> = std::result::Result<T, String>;
+
+fn write_new(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
+    if let Err(error) = file.write_all(bytes) {
+        drop(file);
+        let _ = fs::remove_file(path);
+        return Err(error);
+    }
+    Ok(())
+}
+
 const CONTROLS: &[&str] = &["input", "look", "action", "ui"];
 const OPTIONS: &[(&str, &str)] = &[
     ("--actions", "actions"),
@@ -409,12 +423,7 @@ pub fn observe(port: u16, token: &str, path: Option<&std::path::Path>) -> Result
                 if !png.starts_with(b"\x89PNG\r\n\x1a\n") {
                     return Err("Invalid screenshot PNG".into());
                 }
-                fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(path)
-                    .and_then(|mut f| f.write_all(&png))
-                    .map_err(|e| format!("Cannot save new screenshot: {e}"))?;
+                write_new(path, &png).map_err(|e| format!("Cannot save new screenshot: {e}"))?;
                 result["imagePath"] = path.to_string_lossy().as_ref().into();
             }
             return Ok(result);

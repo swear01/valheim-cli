@@ -33,8 +33,9 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249
         with:
+          toolchain: stable
           targets: ${{ matrix.target }}
           components: rustfmt, clippy
       - if: runner.os == 'Linux'

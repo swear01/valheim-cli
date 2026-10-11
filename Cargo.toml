@@ -6,6 +6,7 @@ rust-version = "1.85"
 description = "Local Valheim agent CLI"
 authors = ["Huang Ssu-Wei"]
 license = "MIT"
+publish = false
 repository = "https://github.com/swear01/valheim-cli"
 
 [lib]

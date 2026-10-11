@@ -37,7 +37,7 @@ for package in metadata["packages"]:
         continue
     directory = Path(package["manifest_path"]).parent
     license_file = next((directory / name for name in ["LICENSE-MIT", "LICENSE"] if (directory / name).is_file()), None)
-    if license_file is None or "MIT" not in package["license"]:
+    if license_file is None or "MIT" not in (package["license"] or ""):
         raise SystemExit(f"Missing supported license notice: {package['name']}")
     notices.append(f"{package['name']} {package['version']}\n{license_file.read_text()}")
 destination = ROOT / "dist"

@@ -105,7 +105,10 @@ fn validation_rejects_unsafe_and_ambiguous_input_before_connecting() {
             .unwrap()
             .contains("--confirm")
     );
-    assert_eq!(run(args(&["--version"])).unwrap()["version"], "0.5.0");
+    assert_eq!(
+        run(args(&["--version"])).unwrap()["version"],
+        env!("CARGO_PKG_VERSION")
+    );
     assert!(
         run(args(&["status", "--profile", "missing-profile"]))
             .unwrap_err()
