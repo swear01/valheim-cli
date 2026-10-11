@@ -52,6 +52,7 @@ with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslev
     output.write(binary, executable)
     output.write(ROOT / "LICENSE", "LICENSE.txt")
     output.write(ROOT / "README.md", "README.md")
+    output.write(ROOT / "skills/valheim-control/SKILL.md", "skills/valheim-control/SKILL.md")
     output.writestr("THIRD-PARTY-NOTICES.txt", "\n\n".join(notices))
 digest = hashlib.sha256(archive.read_bytes()).hexdigest()
 archive.with_suffix(".zip.sha256").write_text(f"{digest}  {archive.name}\n")

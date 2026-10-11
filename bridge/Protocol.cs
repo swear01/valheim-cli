@@ -203,14 +203,14 @@ namespace ValheimCliBridge
                 return value;
             }
         }
-        public static byte[] ReadFrame(Stream stream)
+        public static byte[] ReadFrame(Stream stream, byte[] header = null)
         {
-            var header = ReadExact(stream, 4);
+            header = header ?? ReadExact(stream, 4);
             var length = ((uint)header[0] << 24) | ((uint)header[1] << 16) | ((uint)header[2] << 8) | header[3];
             if (length == 0 || length > MaxFrame) throw new InvalidDataException("Invalid frame length");
             return ReadExact(stream, (int)length);
         }
-        private static byte[] ReadExact(Stream stream, int length)
+        internal static byte[] ReadExact(Stream stream, int length)
         {
             var bytes = new byte[length];
             for (int offset = 0; offset < length;)
@@ -221,10 +221,15 @@ namespace ValheimCliBridge
             }
             return bytes;
         }
-        public static void WriteFrame(Stream stream, Response response)
+        internal static byte[] EncodeResponse(Response response)
         {
             var bytes = Encode(response);
             if (bytes.Length > (response.image == null && response.ui == null ? MaxFrame : MaxObservationFrame)) throw new InvalidDataException("Response too large");
+            return bytes;
+        }
+        public static void WriteFrame(Stream stream, Response response)
+        {
+            var bytes = EncodeResponse(response);
             stream.Write(new byte[] { (byte)(bytes.Length >> 24), (byte)(bytes.Length >> 16), (byte)(bytes.Length >> 8), (byte)bytes.Length }, 0, 4);
             stream.Write(bytes, 0, bytes.Length);
         }

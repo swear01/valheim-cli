@@ -1,16 +1,17 @@
 # ValheimCli
 
-Let AI agents read game state, take screenshots and control your character through a local CLI.
+Let AI agents read game state, take screenshots and control your character.
 Movement, combat, UI buttons and console commands use game methods without moving your mouse or taking window focus.
 Bring your own agent; no AI model is included.
 
 ## Install
 
 1. Install **ValheimCli** and **BepInEx** through your mod manager, or extract the [Thunderstore download](https://thunderstore.io/c/valheim/p/swear01/ValheimCli/) into your BepInEx installation. Only the player being controlled needs the mod.
-2. Download the CLI ZIP for **Windows x64**, **Linux x64**, or **macOS Intel / Apple Silicon** from [GitHub Releases](https://github.com/swear01/valheim-cli/releases). Extract it and run `valheim.exe` on Windows or `./valheim` on Linux/macOS. Add its folder to PATH to use the `valheim` examples below from anywhere.
+2. Give your agent the [Valheim control skill](https://github.com/swear01/valheim-cli/blob/main/skills/valheim-control/SKILL.md) and the folder **containing BepInEx**. With bridge **0.5.0+**, the agent can use ordinary HTTP tools or its existing shell. The game must be running.
 
-**No Node.js, Bun or Rust installation is needed.** The native CLI includes its bridge installer and Windows startup script. The C# mod serves game commands locally; the CLI connects to it. Both run on the game computer, independently of your mod manager or modpack.
-On Windows, the CLI does not open a console window. Agents should invoke it directly, capture JSON output and wait for its process to exit; interactive shells may return early.
+**The CLI is optional.** No Node.js, Bun, Rust or separate server installation is needed.
+The C# mod provides a local HTTP/JSON API, independently of your mod manager or modpack.
+A skill teaches the agent how to call it; the agent still needs shell or HTTP access on the game computer.
 Exit Valheim before upgrading, and remove the old `ValheimCliBridge` mod if installed.
 
 ## Enable control
@@ -24,9 +25,15 @@ AllowControl = true
 
 Relaunch the modded game. Console access is optional: set `AllowConsole = true` and launch with `-console`. Normal command permissions still apply.
 
-## Use
+## Optional CLI
 
-Replace `<folder>` with the folder **containing** `BepInEx`: your game folder for a manual install, or your mod manager's profile folder.
+For convenient commands, screenshot files, installation and Windows Agent startup,
+download the native CLI ZIP for your OS from [GitHub Releases](https://github.com/swear01/valheim-cli/releases).
+Extract it and run `valheim.exe` on Windows or `./valheim` on Linux/macOS; add its folder to PATH for these examples.
+On Windows it opens no console window; agents should capture output and wait for process exit.
+
+
+Replace `<folder>` with your game folder for a manual install, or your mod manager's profile folder.
 
 ```sh
 valheim status --profile "<folder>"

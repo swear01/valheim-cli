@@ -158,7 +158,7 @@ fn linked_dll_and_unreadable_subfolders_cannot_hide_an_existing_bridge() {
 }
 
 #[test]
-fn native_binary_installs_embedded_original_release_without_sidecar_files() {
+fn native_binary_installs_current_bridge_without_sidecar_files() {
     let temp = Temp::new();
     let profile = temp.profile();
     let executable = temp.0.join(if cfg!(windows) {
@@ -182,9 +182,9 @@ fn native_binary_installs_embedded_original_release_without_sidecar_files() {
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
         hash(&fs::read(result["path"].as_str().unwrap()).unwrap()),
-        "35ad8648a5b7824eeb4c849ae10716d0d057bd0514b81cd24efb043cc51c57e2"
+        hash(valheim_agent_cli::install::DLL)
     );
-    assert_eq!(result["version"], "0.4.0");
+    assert_eq!(result["version"], "0.5.0");
 }
 
 #[test]

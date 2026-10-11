@@ -391,7 +391,9 @@ pub fn run(args: Vec<String>) -> Result<Value> {
         return Ok(json!({"ok":true,"help":include_str!("help.txt")}));
     }
     if args == ["--version"] {
-        return Ok(json!({"ok":true,"version":env!("CARGO_PKG_VERSION"),"bridgeVersion":"0.4.0"}));
+        return Ok(
+            json!({"ok":true,"version":env!("CARGO_PKG_VERSION"),"bridgeVersion":serde_json::from_slice::<Value>(install::MANIFEST).map_err(|_| "Invalid bridge manifest")?["version"]}),
+        );
     }
     let args = parse(args)?;
     match args.request["operation"].as_str().unwrap() {

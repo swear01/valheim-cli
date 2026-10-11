@@ -111,6 +111,7 @@ static class Program
         var started = Execute(teleport);
         Assert(started.ok && started.state == "started" && started.destination.x == 1 && started.position.x == 0, "Teleport arrival misreported");
         Assert(!Execute(teleport).ok, "Concurrent teleport accepted");
+        await HttpTests.Run();
         InputTests.Run();
         ConsoleTests.Run();
         System.Console.WriteLine("PASS: schema, auth, framing, cancelled timeout, normal dispatch, stop, execution failure, unknown-outcome timeout, host/permission/game-refusal/arrival policies with game fixture");
