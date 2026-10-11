@@ -45,6 +45,15 @@ fn windowless_executable_preserves_piped_output_and_exit_codes() {
                 .unwrap()["ok"],
             ok
         );
+        let waited = Command::new("cmd.exe")
+            .args(["/D", "/S", "/C"])
+            .raw_arg(format!("start \"\" /B /WAIT \"{executable}\" {argument}"))
+            .creation_flags(0x08000000)
+            .output()
+            .unwrap();
+        assert_eq!(waited.status.code(), Some(if ok { 0 } else { 1 }));
+        assert_eq!(waited.stdout, output.stdout);
+        assert_eq!(waited.stderr, output.stderr);
     }
 }
 
