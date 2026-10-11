@@ -61,6 +61,11 @@ test('Standalone and manager plugin layouts reuse one verified bridge and refuse
       await assert.rejects(readFile(join(plugins, 'swear01-ValheimCliBridge', 'ValheimCliBridge.dll')), { code: 'ENOENT' });
     }
     assert.equal((await install(profile, artifact)).path, join(link, 'ValheimCliBridge.dll'));
+    const alias = join(plugins, 'linked-mods-alias');
+    await symlink(external, alias, linkType);
+    assert.equal(await realpath((await install(profile, artifact)).path), await realpath(linkedDll));
+    assert.equal(await realpath(await installedBridge(profile, hash)), await realpath(linkedDll));
+    await rm(alias);
     await rename(linkedDll, current);
     await writeFile(linkedDll, dll);
     await assert.rejects(install(profile, artifact), /Multiple bridge DLLs/);

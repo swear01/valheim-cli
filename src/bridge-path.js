@@ -10,7 +10,7 @@ export async function installedBridge(profile, expected) {
     if (error.code === 'ENOENT') return null;
     throw error;
   }
-  const found = [];
+  const found = new Map();
   async function scan(folder, parents = new Set()) {
     // An incomplete scan must fail: skipping unreadable folders can install a duplicate.
     const resolved = await realpath(folder);
@@ -29,15 +29,16 @@ export async function installedBridge(profile, expected) {
       if (entry.isDirectory()) await scan(path, ancestors);
       else if (entry.name.toLowerCase() === 'valheimclibridge.dll') {
         if (!entry.isFile()) throw new Error('Bridge DLL must be a regular file');
-        found.push(path);
+        found.set(await realpath(path), path);
       }
     }
   }
   await scan(plugins);
-  if (found.length > 1) throw new Error('Multiple bridge DLLs found. Exit Valheim and remove duplicate bridge copies before continuing.');
-  if (!found.length) return null;
-  if (createHash('sha256').update(await readFile(found[0])).digest('hex') !== expected) {
+  if (found.size > 1) throw new Error('Multiple bridge DLLs found. Exit Valheim and remove duplicate bridge copies before continuing.');
+  const [current] = found.values();
+  if (!current) return null;
+  if (createHash('sha256').update(await readFile(current)).digest('hex') !== expected) {
     throw new Error('Different bridge already installed. Exit Valheim and back up/remove only this plugin before upgrading.');
   }
-  return found[0];
+  return current;
 }
