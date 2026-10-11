@@ -5,3 +5,5 @@ node_modules/
 !/bin/
 bridge-dist/
 *.token
+target/
+dist/

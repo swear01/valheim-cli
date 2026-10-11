@@ -1,0 +1,26 @@
+valheim launch-agent --profile <folder> --game <path/to/valheim.exe> --confirm
+valheim install --profile <BepInEx installation root>
+valheim status --profile <folder> [--port 28761]
+valheim players --profile <folder>
+valheim observe --profile <folder> [--image <new.png>]
+valheim input --profile <folder> --confirm [--move-x -1..1] [--move-z -1..1]
+  [--actions attack,secondary,block,jump,crouch,run,dodge] [--ms 200]
+valheim look --profile <folder> --confirm [--yaw <degrees>] [--pitch <degrees>]
+valheim action --profile <folder> --confirm --action menu|interact|slot|inventory|build-menu|hide|guardian|place|rotate
+  [--slot 1..8] [--scroll -10..10]
+valheim ui-list --profile <folder> [--offset 0]
+valheim ui --profile <folder> --confirm --ui-action click|scroll
+  --target <ID from ui-list> [--button left|right|middle] [--scroll -10..10]
+valheim console --profile <folder> --command "help" --confirm
+valheim stop --profile <folder>
+valheim teleport <x> <y> <z> --profile <folder> --confirm [--request-id <UUID>]
+Game-internal controls only. No OS keyboard/mouse injection. Console calls native TryRunCommand without typing.
+Input requires AllowControl=true; background operation is supported. F12 in the game revokes control and console access.
+Console requires AllowConsole=true + enabled game console; native restrictions apply.
+Movement is relative to player look. Input lasts 50..5000 ms; poll status and observe.
+Look takes degree deltas: positive yaw turns right, positive pitch looks down.
+UI IDs expire after 30 seconds, any UI action or another ui-list. Re-list before each action.
+Buttons use their native submit/click handlers, including startup menus and mod UI.
+Teleport coordinates are world X, Y (height), Z; requires host + AllowTeleport=true.
+All results are JSON. No automatic write retries.
+--profile is the folder containing BepInEx, such as the game folder or a mod-manager profile. No mod manager or modpack is required.

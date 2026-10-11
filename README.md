@@ -7,13 +7,9 @@ Bring your own agent; no AI model is included.
 ## Install
 
 1. Install **ValheimCli** and **BepInEx** through your mod manager, or extract the [Thunderstore download](https://thunderstore.io/c/valheim/p/swear01/ValheimCli/) into your BepInEx installation. Only the player being controlled needs the mod.
-2. To use the CLI, install [Node.js 22+](https://nodejs.org/en/download), download `valheim-agent-cli-0.4.0.tgz` from [GitHub Releases](https://github.com/swear01/valheim-cli/releases/tag/v0.4.0), then run this in the download folder:
+2. Download the CLI ZIP for **Windows x64**, **Linux x64**, or **macOS Intel / Apple Silicon** from [GitHub Releases](https://github.com/swear01/valheim-cli/releases). Extract it and run `valheim.exe` on Windows or `./valheim` on Linux/macOS. Add its folder to PATH to use the `valheim` examples below from anywhere.
 
-   ```sh
-   npm install -g ./valheim-agent-cli-0.4.0.tgz
-   ```
-
-**Only the CLI needs Node.js.** The CLI is written in JavaScript; Node.js runs it and sends commands to the game mod. The C# mod runs inside Valheim through BepInEx without Node.js. Both run on the game computer; no specific mod manager or modpack is required.
+**No Node.js, Bun or Rust installation is needed.** The native CLI includes its bridge installer and Windows startup script. The C# mod serves game commands locally; the CLI connects to it. Both run on the game computer, independently of your mod manager or modpack.
 Exit Valheim before upgrading, and remove the old `ValheimCliBridge` mod if installed.
 
 ## Enable control

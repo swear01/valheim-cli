@@ -17,15 +17,15 @@ bridge source compiled in a separate test location, not the exact release DLL.
 
 ## Install
 
-The game mod requires Valheim and BepInEx 5 for Valheim. The external CLI additionally
-requires Node.js 22+ on the game computer; Node.js is not a dependency of the mod DLL.
-Node.js runs the JavaScript CLI and its local connection to the C# mod loaded by BepInEx.
-No mod manager or QoL modpack is required. Download
-`valheim-agent-cli-0.4.0.tgz` from [GitHub Releases](https://github.com/swear01/valheim-cli/releases/tag/v0.4.0),
-then install it:
+The game mod requires Valheim and BepInEx 5 for Valheim. CLI **0.5.0** is a native
+Rust executable, with no separately installed Node.js, Bun, Rust or .NET runtime.
+It embeds the original published **0.4.0 bridge**, its checksum manifest and the
+Windows Agent startup script. Existing 0.4.0 bridge installations are reused.
+No mod manager or QoL modpack is required. Download the ZIP matching your OS and
+CPU from [GitHub Releases](https://github.com/swear01/valheim-cli/releases), extract
+it, and run the executable directly or add its folder to PATH:
 
 ```sh
-npm install -g ./valheim-agent-cli-0.4.0.tgz
 valheim install --profile "E:\SteamLibrary\steamapps\common\Valheim"
 ```
 
@@ -36,9 +36,8 @@ the CLI does not launch or call those managers. Keep using that same root on
 every command. Passing the `BepInEx` folder itself adds an extra directory level
 and is incorrect.
 
-For manual plugin installation, copy `bridge-dist/ValheimCliBridge.dll` from the
-CLI package into `BepInEx/plugins/ValheimCliBridge/`, then start the game with
-BepInEx enabled. The installer and Agent launcher recognize the original DLL
+For manual plugin installation, use `valheim install` to extract the embedded DLL,
+then start the game with BepInEx enabled. The installer and Agent launcher recognize the original DLL
 filename anywhere under `BepInEx/plugins`, including flat and manager-created
 subfolders. A matching existing copy is reused; duplicate or different-version
 copies are refused. Linked plugin subdirectories are scanned read-only, with cycles
@@ -64,7 +63,7 @@ On first modded launch the bridge generates:
 - `BepInEx/config/swear01.ValheimCliBridge.token`
 
 Keep the random token private and out of modpacks. It inherits the profile's OS
-permissions. There are no npm install hooks or runtime downloads. Only the
+permissions. There are no runtime downloads. Only the
 computer running the controlled character needs this bridge. A teammate/server
 does not need it for ordinary actions. This is not a dedicated-server bot.
 
@@ -268,6 +267,14 @@ safe destinations in a test/backup world.
 
 ## Transport and failure limits
 
+The C# DLL is already the in-game service. An agent with a custom TCP client can
+connect directly without this CLI; all permissions, replay checks and game-method
+dispatch still run in the DLL. The CLI is a shell adapter, screenshot file writer,
+installer and optional Windows launcher. It is not a separate background server.
+The transport below is a custom framed JSON protocol, not an HTTP or MCP endpoint.
+Shell-only agents need the native CLI or their own protocol client. A DLL cannot
+launch Valheim before the game has loaded it.
+
 Only `127.0.0.1:28761` listens. Every operation needs the local 256-bit token and a
 UUID. No outbound AI endpoint or world-file editing is added. Never forward the
 port. Frames use a four-byte big-endian length plus JSON: requests/ordinary replies
@@ -285,19 +292,34 @@ already spent, a crouch toggle or a crafting job already started.
 
 ## Build and verification
 
-Requires Node.js 22+ and .NET SDK 9. Pinned NuGet references are compile-only and
-never bundled. Control uses the game's existing Harmony/Unity UI runtime.
+Thunderstore currently assigns one ZIP to each package/version; its manifest has
+no OS/CPU asset selector. We keep the managed bridge in one Thunderstore listing
+and distribute the native CLI as separate GitHub Release assets. Bundling every
+CLI executable in the same Thunderstore ZIP would make everyone download all
+platforms, and does not make a mod manager choose or install an external CLI.
+See the [manifest implementation](https://github.com/thunderstore-io/Thunderstore/blob/master/django/thunderstore/repository/package_manifest.py)
+and [package-version model](https://github.com/thunderstore-io/Thunderstore/blob/master/django/thunderstore/repository/models/package_version.py).
+
+Requires Rust, Python 3.11+ for packaging, and .NET SDK 9 for bridge verification.
+These are developer tools, not user dependencies. The preparation script downloads
+the original bridge release and verifies both the archive and DLL SHA-256 before
+embedding it; rebuilding the C# project is an API check and does not replace that
+published DLL. Pinned NuGet references are compile-only and never bundled.
+Control uses the game's existing Harmony/Unity UI runtime.
 
 ```sh
-npm run test:bridge
-npm test
-npm run build:bridge
-npm run pack:bridge
-npm pack
+python3 scripts/prepare-bridge.py
+dotnet run --project bridge-tests -c Release
+dotnet build bridge -c Release
+cargo test --locked
+cargo test --locked --test csharp -- --ignored
+cargo build --locked --release
 ```
 
-CI runs on Windows/Linux. Tests cover the production protocol, dispatcher, replay
-protection, Node-to-C# TCP, lease expiry, edge/hold actions, hook arguments, local
+CI builds and runs tests on Windows x64, Linux x64 and macOS Intel/Apple Silicon.
+Linux releases use musl and Windows releases statically link the MSVC runtime.
+Tests cover the production protocol, dispatcher, replay protection, Rust-to-C#
+TCP, an absolute client deadline, lease expiry, edge/hold actions, hook arguments, local
 ownership, background/UI guards, stop epochs, game-action calls, UI events and screenshot
 cleanup. Game/UI/Harmony fixtures do not execute real runtime patches or render
 real pixels. UI discovery/menu activation, multiplayer and long sessions require
