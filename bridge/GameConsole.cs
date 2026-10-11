@@ -11,7 +11,7 @@ namespace ValheimCliBridge
         [ThreadStatic] private static List<string> output;
         [ThreadStatic] private static bool truncated;
 
-        internal static Response Execute(Request request)
+        internal static Response Execute(Request request, Response response)
         {
             context = Console.instance;
             output = new List<string>();
@@ -19,7 +19,10 @@ namespace ValheimCliBridge
             try
             {
                 context.TryRunCommand(request.command, silentFail: false, skipAllowedCheck: false);
-                return new Response { id = request.id, ok = true, state = "submitted", consoleOutput = output.ToArray(), consoleOutputTruncated = truncated };
+                response.state = "submitted";
+                response.consoleOutput = output.ToArray();
+                response.consoleOutputTruncated = truncated;
+                return response;
             }
             finally { context = null; output = null; }
         }

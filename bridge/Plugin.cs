@@ -144,7 +144,7 @@ namespace ValheimCliBridge
                 if (!CanConsole) return Response.Error(request.id, "Console requires AllowConsole=true, a focused game and an enabled game console", "cancelled");
                 input?.Stop("console");
                 image = null;
-                return GameConsole.Execute(request);
+                return GameConsole.Execute(request, response);
             }
             if (request.IsControl)
             {

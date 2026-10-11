@@ -44,7 +44,7 @@ static class ConsoleTests
             Assert(!Execute().ok && calls == 0, "Disabled native console executed");
             Console.instance.Enabled = true;
             var response = Execute();
-            Assert(response.ok && response.state == "submitted" && calls == 1 && response.consoleOutput.SequenceEqual(new[] { "native result" }), "Native invocation/output failed");
+            Assert(response.consoleAllowed && response.inWorld && response.foreground && response.ok && response.state == "submitted" && calls == 1 && response.consoleOutput.SequenceEqual(new[] { "native result" }), "Native invocation/output failed");
             Assert(!Console.Visible, "Console UI opened");
             Console.instance.Handler = (_, _, _) => { for (int i = 0; i < 40; i++) Console.instance.AddString(new string('\0', 1000)); };
             response = Execute();
@@ -54,7 +54,11 @@ static class ConsoleTests
             response = Execute();
             Assert(response.consoleOutput[0].Length == 255 && Protocol.Encode(response).Length < Protocol.MaxFrame, "Truncation split a surrogate pair");
             Console.instance.Handler = (_, _, _) => throw new InvalidOperationException();
-            try { Execute(); throw new Exception("Native exception hidden"); } catch (TargetInvocationException) { }
+            var dispatcher = new Dispatcher(r => GameConsole.Execute(r, new Response { id = r.id, ok = true }));
+            var work = Task.Run(() => dispatcher.Run(Command()));
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (!work.IsCompleted && clock.ElapsedMilliseconds < 5000) { dispatcher.Pump(); Thread.Yield(); }
+            Assert(work.IsCompleted && !work.Result.ok && work.Result.error.Contains("InvalidOperationException") && work.Result.state != "cancelled", "Dispatcher did not contain native exception with uncertain outcome");
             Console.instance.AddString("late output");
             Console.instance.Handler = (_, _, _) => Console.instance.AddString("not valid in the current context");
             response = Execute();
