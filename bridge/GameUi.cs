@@ -20,11 +20,12 @@ namespace ValheimCliBridge
         public static void List(Response response, int offset)
         {
             Invalidate();
-            var objects = UnityEngine.Object.FindObjectsOfType<MonoBehaviour>()
+            var objects = UnityEngine.Object.FindObjectsOfType<Canvas>()
+                .Where(canvas => canvas != null && canvas.isActiveAndEnabled)
+                .SelectMany(canvas => canvas.GetComponentsInChildren<MonoBehaviour>())
                 .Where(c => c != null && c.isActiveAndEnabled &&
                     Supported(c))
                 .Select(c => c.gameObject).Distinct()
-                .Where(o => o.GetComponentInParent<Canvas>() != null)
                 .OrderBy(o => o.GetInstanceID()).ToArray();
             response.uiTotal = objects.Length;
             response.uiNextOffset = offset + 64 < objects.Length ? (int?)(offset + 64) : null;

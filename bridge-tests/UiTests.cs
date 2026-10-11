@@ -55,6 +55,14 @@ static class UiTests
         for(var i=0;i<66;i++) { var item=new GameObject(); Attach(item,new Canvas()); Attach(item,new Button()); }
         var page=List(); Assert(page.ui.Length==64 && page.uiTotal==67 && page.uiNextOffset==64,"UI pagination failed");
         Assert(List(64).ui.Length==3 && List(64).uiNextOffset==null,"Last UI page failed");
+        UnityEngine.Object.Objects.Clear();
+        var canvasRoot=new GameObject(); var outerCanvas=Attach(canvasRoot,new Canvas());
+        var nested=new GameObject(); nested.transform.parent=canvasRoot.transform; var innerCanvas=Attach(nested,new Canvas());
+        o=new GameObject(); o.transform.parent=nested.transform; Attach(o,new Button());
+        Attach(new GameObject(),new Button());
+        EventSystem.current.Hits.Clear(); EventSystem.current.Hits.Add(new(){gameObject=o});
+        Assert(List().ui.Length==1 && List().ui[0].interactable,"Nested Canvas discovery duplicated or lost controls, or included world objects");
+        outerCanvas.enabled=innerCanvas.enabled=false; Assert(List().ui.Length==0,"Disabled Canvas controls were discovered");
         UnityEngine.Object.Objects.Clear(); o = new GameObject(); Attach(o,new Canvas()); Attach(o,new ModClick());
         EventSystem.current.Hits.Clear(); EventSystem.current.Hits.Add(new(){gameObject=o});
         var events=new List<string>();

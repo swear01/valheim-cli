@@ -20,9 +20,11 @@ namespace UnityEngine
         public readonly Dictionary<Type, object> Components = new();
         public readonly Dictionary<Type, Action<EventSystems.BaseEventData>> Handlers = new();
         public T GetComponent<T>() where T:class => Components.Values.OfType<T>().FirstOrDefault();
-        public T GetComponentInParent<T>() where T:class => GetComponent<T>();
+        private GameObject Parent => Object.Objects.Select(c => c.gameObject).FirstOrDefault(o => o.transform == transform.parent);
+        public T GetComponentInParent<T>() where T:class => GetComponent<T>() ?? Parent?.GetComponentInParent<T>();
         public T[] GetComponents<T>() => Components.Values.OfType<T>().ToArray();
-        public T[] GetComponentsInChildren<T>() => GetComponents<T>().Concat(Components.Values.Where(v => v == null).Select(_ => default(T))).ToArray();
+        public T[] GetComponentsInChildren<T>() => new[] { this }.Concat(Object.Objects.Where(c => c.gameObject.activeInHierarchy && c.transform.IsChildOf(transform)).Select(c => c.gameObject)).Distinct()
+            .SelectMany(o => o.GetComponents<T>().Concat(o.Components.Values.Where(v => v == null).Select(_ => default(T)))).ToArray();
         public T[] GetComponentsInParent<T>() => GetComponents<T>();
     }
     public class Component
