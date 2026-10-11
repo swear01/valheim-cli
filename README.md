@@ -13,13 +13,35 @@ Multiplayer, long sessions and a full playthrough remain unverified.
 
 ## Install
 
-Install Node.js 22+ on the same computer as Valheim. Download the experimental CLI
-tarball when provided, then install it:
+Requires Valheim, BepInEx 5 for Valheim and Node.js 22+ on the game computer.
+No mod manager or QoL modpack is required. Download the experimental CLI tarball
+when provided, then install it:
 
 ```sh
 npm install -g ./valheim-agent-cli-0.4.0.tgz
-valheim install --profile "C:\path\to\Gale\profile"
+valheim install --profile "E:\SteamLibrary\steamapps\common\Valheim"
 ```
+
+`--profile` means the installation root **containing** `BepInEx`, not a
+Gale-specific profile. For a manual installation, use the game folder. With
+Gale, r2modman or Thunderstore Mod Manager, use the selected profile's root;
+the CLI does not launch or call those managers. Keep using that same root on
+every command. Passing the `BepInEx` folder itself adds an extra directory level
+and is incorrect.
+
+For manual plugin installation, copy `bridge-dist/ValheimCliBridge.dll` from the
+CLI package into `BepInEx/plugins/ValheimCliBridge/`, then start the game with
+BepInEx enabled. The installer and Agent launcher recognize the original DLL
+filename anywhere under `BepInEx/plugins`, including flat and manager-created
+subfolders. A matching existing copy is reused; duplicate or different-version
+copies are refused. Linked plugin subdirectories are scanned read-only, with cycles
+skipped. A linked `BepInEx`/`plugins` root or bridge DLL is refused; installation
+never writes through a linked directory.
+Directory aliases pointing to the same physical DLL count as one copy.
+Unreadable plugin directories abort installation/launch preflight: skipping them
+could hide an existing bridge and create a duplicate. Fix directory permissions
+before retrying.
+The CLI does not install BepInEx or convert an unmodded game automatically.
 
 0.4.0 is not published to npm or Thunderstore. Exit Valheim before upgrading.
 The installer checks the bundled DLL hash and preserves other mods/settings. It
@@ -39,14 +61,17 @@ does not need it for ordinary actions. This is not a dedicated-server bot.
 
 ## Enable character control
 
-In F10 / Mods settings → Valheim CLI Bridge, enable **AllowControl**. Alternatively,
-exit the game, edit the config and relaunch:
+Exit the game, edit `BepInEx/config/swear01.ValheimCliBridge.cfg`, and relaunch:
 
 ```ini
 [Permissions]
 AllowControl = true
 AllowTeleport = false
 ```
+
+If a separate configuration-manager mod is installed, its in-game settings UI
+can also change these values. F10 / Mods settings is not supplied by this bridge
+and is not a dependency.
 
 Control requires ownership of the local, living character and no
 system menu, chat, console, text input, cutscene or teleport. It works for the host
@@ -281,9 +306,9 @@ Use a separate character and world for unattended testing. After installing this
 CLI's bridge and enabling `AllowControl` in a normal launch, exit Valheim:
 
 ```powershell
-valheim launch-agent --profile "C:\path\to\Gale\profile" --game "E:\SteamLibrary\steamapps\common\Valheim\valheim.exe" --confirm
-valheim status --profile "C:\path\to\Gale\profile"
-valheim ui-list --profile "C:\path\to\Gale\profile"
+valheim launch-agent --profile "E:\SteamLibrary\steamapps\common\Valheim" --game "E:\SteamLibrary\steamapps\common\Valheim\valheim.exe" --confirm
+valheim status --profile "E:\SteamLibrary\steamapps\common\Valheim"
+valheim ui-list --profile "E:\SteamLibrary\steamapps\common\Valheim"
 ```
 
 Run this command in your signed-in Windows desktop session. It refuses an existing

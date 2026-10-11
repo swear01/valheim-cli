@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { request } from './client.js';
 import { launchAgent } from './agent-launch.js';
+import { installedBridge } from './bridge-path.js';
 
 export const help = `valheim launch-agent --profile <folder> --game <path/to/valheim.exe> --confirm
-valheim install --profile <Gale profile folder>
+valheim install --profile <BepInEx installation root>
 valheim status --profile <folder> [--port 28761]
 valheim players --profile <folder>
 valheim observe --profile <folder> [--image <new.png>]
@@ -30,7 +31,8 @@ Look takes degree deltas: positive yaw turns right, positive pitch looks down.
 UI IDs expire after 30 seconds, any UI action or another ui-list. Re-list before each action.
 Buttons use their native submit/click handlers, including startup menus and mod UI.
 Teleport coordinates are world X, Y (height), Z; requires host + AllowTeleport=true.
-All results are JSON. No automatic write retries.`;
+All results are JSON. No automatic write retries.
+--profile is the folder containing BepInEx, such as the game folder or a mod-manager profile. No mod manager or modpack is required.`;
 
 const inputOptions = { '--actions': 'actions', '--move-x': 'moveX', '--move-z': 'moveZ', '--ms': 'durationMs', '--yaw': 'yaw', '--pitch': 'pitch', '--action': 'action', '--slot': 'slot', '--ui-action': 'uiAction', '--button': 'button', '--scroll': 'scroll', '--target': 'target', '--offset': 'offset', '--command': 'command' };
 const controlCommands = ['input', 'look', 'action', 'ui'];
@@ -103,18 +105,21 @@ export async function install(profile, artifactRoot = fileURLToPath(new URL('../
   const expected = manifest.sha256;
   if (!/^[a-f0-9]{64}$/.test(expected)) throw new Error('Invalid bridge manifest');
   if (createHash('sha256').update(await readFile(source)).digest('hex') !== expected) throw new Error('Bridge checksum mismatch');
-  const targetDir = join(plugins, 'swear01-ValheimCliBridge');
   await safeDirectory(join(profile, 'BepInEx'));
   await safeDirectory(plugins);
-  await safeDirectory(targetDir);
-  const target = join(targetDir, 'ValheimCliBridge.dll');
-  try {
-    await copyFile(source, target, constants.COPYFILE_EXCL);
-  } catch (error) {
-    if (error.code !== 'EEXIST') throw error;
-    if ((await lstat(target)).isSymbolicLink()) throw new Error('Existing bridge must not be a symlink');
-    if (createHash('sha256').update(await readFile(target)).digest('hex') !== expected) {
-      throw new Error('Different bridge already installed. Exit Valheim and back up/remove only this plugin before upgrading.');
+  let target = await installedBridge(profile, expected);
+  if (!target) {
+    const targetDir = join(plugins, 'swear01-ValheimCliBridge');
+    await safeDirectory(targetDir);
+    target = join(targetDir, 'ValheimCliBridge.dll');
+    try {
+      await copyFile(source, target, constants.COPYFILE_EXCL);
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      if ((await lstat(target)).isSymbolicLink()) throw new Error('Existing bridge must not be a symlink');
+      if (createHash('sha256').update(await readFile(target)).digest('hex') !== expected) {
+        throw new Error('Different bridge already installed. Exit Valheim and back up/remove only this plugin before upgrading.');
+      }
     }
   }
   return { ok: true, state: 'installed', path: target, version: manifest.version,
