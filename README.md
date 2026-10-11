@@ -14,8 +14,9 @@ Multiplayer, long sessions and a full playthrough remain unverified.
 ## Install
 
 Requires Valheim, BepInEx 5 for Valheim and Node.js 22+ on the game computer.
-No mod manager or QoL modpack is required. Download the experimental CLI tarball
-when provided, then install it:
+No mod manager or QoL modpack is required. Download
+`valheim-agent-cli-0.4.0.tgz` from [GitHub Releases](https://github.com/swear01/valheim-cli/releases/tag/v0.4.0),
+then install it:
 
 ```sh
 npm install -g ./valheim-agent-cli-0.4.0.tgz
@@ -43,7 +44,9 @@ could hide an existing bridge and create a duplicate. Fix directory permissions
 before retrying.
 The CLI does not install BepInEx or convert an unmodded game automatically.
 
-0.4.0 is not published to npm or Thunderstore. Exit Valheim before upgrading.
+The bridge is distributed as [ValheimCli on Thunderstore](https://thunderstore.io/c/valheim/p/swear01/ValheimCli/).
+The CLI is distributed through GitHub Releases; no npm registry release is provided.
+Exit Valheim before upgrading.
 The installer checks the bundled DLL hash and preserves other mods/settings. It
 refuses to overwrite a different DLL: back up/remove only that bridge first.
 For Thunderstore installation, use the mod manager instead of installing a second
