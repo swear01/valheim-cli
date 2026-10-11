@@ -34,7 +34,9 @@ CLI package into `BepInEx/plugins/ValheimCliBridge/`, then start the game with
 BepInEx enabled. The installer and Agent launcher recognize the original DLL
 filename anywhere under `BepInEx/plugins`, including flat and manager-created
 subfolders. A matching existing copy is reused; duplicate or different-version
-copies are refused. Plugin paths containing symbolic links/junctions are refused.
+copies are refused. Linked plugin subdirectories are scanned read-only, with cycles
+skipped. A linked `BepInEx`/`plugins` root or bridge DLL is refused; installation
+never writes through a linked directory.
 The CLI does not install BepInEx or convert an unmodded game automatically.
 
 0.4.0 is not published to npm or Thunderstore. Exit Valheim before upgrading.

@@ -43,6 +43,20 @@ test('Standalone and manager plugin layouts reuse one verified bridge and refuse
       assert.equal(await installedBridge(profile, hash), current);
       assert.equal((await install(profile, artifact)).path, current);
     }
+    const external = join(root, 'linked-mods');
+    await mkdir(external);
+    const link = join(plugins, 'linked-mods');
+    const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+    await symlink(external, link, linkType);
+    await symlink(plugins, join(external, 'cycle'), linkType);
+    assert.equal((await install(profile, artifact)).path, current);
+    const linkedDll = join(external, 'ValheimCliBridge.dll');
+    await rename(current, linkedDll);
+    assert.equal((await install(profile, artifact)).path, join(link, 'ValheimCliBridge.dll'));
+    await rename(linkedDll, current);
+    await writeFile(linkedDll, dll);
+    await assert.rejects(install(profile, artifact), /Multiple bridge DLLs/);
+    await rm(linkedDll);
     const duplicate = join(plugins, 'ValheimCliBridge.dll');
     await writeFile(duplicate, dll);
     await assert.rejects(install(profile, artifact), /Multiple bridge DLLs/);
