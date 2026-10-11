@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
@@ -10,8 +11,9 @@ namespace ValheimCliBridge
     {
         private static IEnumerable<MethodBase> TargetMethods()
         {
-            yield return AccessTools.Method(typeof(ZCursor), "set_LockState");
-            yield return AccessTools.Method(typeof(ZCursor), "SetVisible");
+            var lockState = AccessTools.Method(typeof(ZCursor), "set_LockState") ?? throw new MissingMethodException("Native cursor lock policy unavailable");
+            var visible = AccessTools.Method(typeof(ZCursor), "SetVisible") ?? throw new MissingMethodException("Native cursor visibility policy unavailable");
+            return new MethodBase[] { lockState, visible };
         }
         public static bool Prefix()
         {

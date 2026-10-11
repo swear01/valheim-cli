@@ -158,6 +158,13 @@ static class InputTests
         Assert(!BackgroundCursor.Prefix() && UnityEngine.Cursor.lockState==CursorLockMode.None && UnityEngine.Cursor.visible,"Background cursor was captured");
         var targets=(IEnumerable<System.Reflection.MethodBase>)typeof(BackgroundCursor).GetMethod("TargetMethods",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic).Invoke(null,null);
         Assert(targets.Count()==2 && targets.All(m=>m!=null),"Native cursor guards missing");
+        foreach(var missing in new[]{"set_LockState","SetVisible"})
+        {
+            HarmonyLib.AccessTools.MissingTarget=missing;
+            try {typeof(BackgroundCursor).GetMethod("TargetMethods",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic).Invoke(null,null);throw new Exception("Missing cursor policy did not fail closed");}
+            catch(System.Reflection.TargetInvocationException e) when(e.InnerException is MissingMethodException){}
+            finally {HarmonyLib.AccessTools.MissingTarget=null;}
+        }
         Application.isFocused=true;UnityEngine.Cursor.lockState=CursorLockMode.Locked;UnityEngine.Cursor.visible=false;
         Assert(BackgroundCursor.Prefix() && UnityEngine.Cursor.lockState==CursorLockMode.Locked && !UnityEngine.Cursor.visible,"Foreground cursor behavior changed");
         Application.isFocused=false;Plugin.Instance=null;

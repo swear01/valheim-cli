@@ -178,7 +178,8 @@ namespace HarmonyLib
     public sealed class Harmony { public Harmony(string id) { } public void PatchAll(System.Reflection.Assembly assembly) { } public void UnpatchSelf() { } }
     public static class AccessTools
     {
-        public static System.Reflection.MethodInfo Method(Type t, string name, Type[] parameters = null) => parameters == null ? t.GetMethod(name, System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic) : t.GetMethod(name, System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic, null, parameters, null);
+        public static string MissingTarget;
+        public static System.Reflection.MethodInfo Method(Type t, string name, Type[] parameters = null) => name == MissingTarget ? null : parameters == null ? t.GetMethod(name, System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic) : t.GetMethod(name, System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic, null, parameters, null);
         public static System.Reflection.FieldInfo Field(Type t, string name) => t.GetField(name,System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic);
     }
 }
