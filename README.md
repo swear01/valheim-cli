@@ -1,6 +1,6 @@
 # ValheimCli
 
-Let an AI agent read game state, take screenshots and control your Valheim character through a local CLI.
+Let AI agents read game state, take screenshots and control your character through a local CLI.
 Movement, combat, UI buttons and console commands use game methods without moving your mouse or taking window focus.
 Bring your own agent; no AI model is included.
 
@@ -13,7 +13,7 @@ Bring your own agent; no AI model is included.
    npm install -g ./valheim-agent-cli-0.4.0.tgz
    ```
 
-**The game mod itself does not need Node.js. The CLI does.** Both run on the game computer. No specific mod manager or modpack is required.
+**Only the CLI needs Node.js.** The CLI is written in JavaScript; Node.js runs it and sends commands to the game mod. The C# mod runs inside Valheim through BepInEx without Node.js. Both run on the game computer; no specific mod manager or modpack is required.
 Exit Valheim before upgrading, and remove the old `ValheimCliBridge` mod if installed.
 
 ## Enable control

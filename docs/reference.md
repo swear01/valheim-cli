@@ -19,6 +19,7 @@ bridge source compiled in a separate test location, not the exact release DLL.
 
 The game mod requires Valheim and BepInEx 5 for Valheim. The external CLI additionally
 requires Node.js 22+ on the game computer; Node.js is not a dependency of the mod DLL.
+Node.js runs the JavaScript CLI and its local connection to the C# mod loaded by BepInEx.
 No mod manager or QoL modpack is required. Download
 `valheim-agent-cli-0.4.0.tgz` from [GitHub Releases](https://github.com/swear01/valheim-cli/releases/tag/v0.4.0),
 then install it:
