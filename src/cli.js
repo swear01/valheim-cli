@@ -19,7 +19,7 @@ valheim ui --profile <folder> --confirm --ui-action click|scroll
 valheim stop --profile <folder>
 valheim teleport <x> <y> <z> --profile <folder> --confirm [--request-id <UUID>]
 Game-internal controls only. No OS keyboard/mouse injection or console execution.
-Input requires AllowControl=true + focused game. F12 revokes control.
+Input requires AllowControl=true; background operation is supported. F12 in the game revokes control.
 Movement is relative to player look. Input lasts 50..5000 ms; poll status and observe.
 Look takes degree deltas: positive yaw turns right, positive pitch looks down.
 UI coordinates start at top left. UI events are dispatched inside the game.

@@ -41,8 +41,32 @@ static class InputTests
             var queued=Input();queued.controlEpoch=controls.Epoch;controls.Stop();Reject(()=>controls.Start(queued));
             controls.Start(valid);controls.Dispose();Assert(controls.Sample()==null,"Disposed control resumed");Reject(()=>controls.Start(valid));
         }
-        GameInput.Validate();CheckPlugin();CheckUi();CheckEmergencyTransport();
+        GameInput.Validate();CheckBackgroundLifecycle();CheckPlugin();CheckUi();CheckEmergencyTransport();
         System.Console.WriteLine("PASS: semantic schema, lease, edge/hold timing, native permission/delay/sprint guards, game argument hook, local ownership, UI guards/events, stop epochs, placement entry, screenshot lifecycle (fixtures only)");
+    }
+    static void CheckBackgroundLifecycle()
+    {
+        var flags=System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance;
+        var originalPath=BepInEx.Paths.ConfigPath;
+        var originalBackground=Application.runInBackground;
+        var folder=Path.Combine(Path.GetTempPath(),"valheim-background-"+Guid.NewGuid());
+        Directory.CreateDirectory(folder);BepInEx.Paths.ConfigPath=folder;
+        try
+        {
+            foreach(var background in new[]{false,true})
+            {
+                Application.runInBackground=background;
+                var plugin=new Plugin();
+                try
+                {
+                    typeof(Plugin).GetMethod("Awake",flags).Invoke(plugin,null);
+                    Assert(Plugin.Instance==plugin && Application.runInBackground,"Bridge did not enable background execution");
+                }
+                finally {typeof(Plugin).GetMethod("OnDestroy",flags).Invoke(plugin,null);}
+                Assert(Application.runInBackground==background,"Bridge did not restore background execution on unload");
+            }
+        }
+        finally {Application.runInBackground=originalBackground;BepInEx.Paths.ConfigPath=originalPath;Directory.Delete(folder,true);}
     }
     static void CheckEmergencyTransport()
     {
@@ -121,7 +145,21 @@ static class InputTests
         Chat.instance=new Chat{Focus=true};Assert(!Execute(Input()).ok,"Chat control accepted");Chat.instance=null;
         Player.m_localPlayer.Dead=true;Assert(!Execute(Input()).ok,"Dead control accepted");Player.m_localPlayer.Dead=false;
         InventoryGui.Visible=true;Assert(!Execute(Input()).ok,"Movement leaked into inventory");InventoryGui.Visible=false;
-        Execute(hold);Application.isFocused=false;Hook(Player.m_localPlayer);Assert(!controller.Active,"Focus loss retained lease");Application.isFocused=true;
+        Execute(hold);Application.isFocused=false;
+        typeof(Plugin).GetMethod("OnApplicationFocus",flags).Invoke(plugin,new object[]{false});
+        Assert(Hook(Player.m_localPlayer).Frame.Z==1 && controller.Active,"Focus loss cancelled native control");
+        Execute(new Request{operation="stop"});
+        Assert(Execute(new Request{operation="look",yaw=15}).ok && Player.m_localPlayer.Look.x==15,"Background look was refused");
+        Assert(Execute(hold).ok,"Background movement was refused");
+        Menu.Visible=true;Hook(Player.m_localPlayer);Assert(!controller.Active && !Execute(Input()).ok,"Background mode bypassed the menu guard");Menu.Visible=false;
+        UnityEngine.Cursor.lockState=CursorLockMode.Locked;UnityEngine.Cursor.visible=false;
+        Assert(!BackgroundCursor.Prefix() && UnityEngine.Cursor.lockState==CursorLockMode.None && UnityEngine.Cursor.visible,"Background cursor was captured");
+        var targets=(IEnumerable<System.Reflection.MethodBase>)typeof(BackgroundCursor).GetMethod("TargetMethods",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic).Invoke(null,null);
+        Assert(targets.Count()==2 && targets.All(m=>m!=null),"Native cursor guards missing");
+        Application.isFocused=true;UnityEngine.Cursor.lockState=CursorLockMode.Locked;UnityEngine.Cursor.visible=false;
+        Assert(BackgroundCursor.Prefix() && UnityEngine.Cursor.lockState==CursorLockMode.Locked && !UnityEngine.Cursor.visible,"Foreground cursor behavior changed");
+        Application.isFocused=false;Plugin.Instance=null;
+        Assert(BackgroundCursor.Prefix(),"Disabled bridge changed cursor behavior");Plugin.Instance=plugin;Application.isFocused=true;
         Execute(new Request{operation="action",action="slot",slot=1});Assert(Player.m_localPlayer.Hotbar==1,"Hotbar did not use game method");
         Execute(new Request{operation="action",action="interact"});Assert(Player.m_localPlayer.Interactions==1,"Interact did not use game method");
         Player.m_localPlayer.NativeInputAllowed=false;

@@ -13,7 +13,8 @@ No AI subscription, model key or endpoint is configured by the mod.
 > Poll the same inputId until inactive, then observe. Actions use game methods,
 > not key bindings; adjust for terrain, equipped gear and UI state. Started/applied
 > does not prove success. Stop on low health, lost context, another person playing
-> the character, focus loss or an uncertain write. Never repeat a timed-out write
+> the character or an uncertain write. Background control is supported. Never
+> repeat a timed-out write
 > automatically. Do not teleport, discard valuables, destroy structures or spend
 > scarce resources unless requested. Finish with stop and a verified report.
 
@@ -32,8 +33,9 @@ crafting task before combat. There is no autonomous navigation or combat planner
    controller acted. Completed means the lease expired, not that the goal was met.
 5. Observe and verify. During a movement/attack lease, `look --yaw 15 --confirm`
    adjusts aim without changing the deadline. No UI/discrete action during a lease.
-6. `valheim stop --profile <folder>` when done or uncertain. F12 also revokes
-   permission. A neutral frame is applied on the next game control tick.
+6. `valheim stop --profile <folder>` when done or uncertain. F12 in the focused
+   game also revokes permission. Use authenticated stop from another app.
+   A neutral frame is applied on the next game control tick.
 
 For inventory/crafting, stop movement, `action --action inventory --confirm`, then
 inspect a fresh image. Dispatch `ui --ui-action click --pointer-x ... --pointer-y
@@ -79,7 +81,8 @@ after the user authorizes restarting for that test.
 - Test build-menu delay, focused build search, text viewer, exhaustion/recovery,
   toggle block and emergency stop while the native input delay is active.
 - Joining clients control only their character without OP; teleport stays host-only.
-- Focus loss, F12, permission revocation, stop, death, logout and unload cancel
+- Unfocused actions work without activating the window or capturing the OS cursor.
+- F12 in the game, permission revocation, stop, death, logout and unload cancel
   active/queued controls. There must be no OS events or stale session images.
 - After these pass, run an extended session and verify saving and memory use.
 
