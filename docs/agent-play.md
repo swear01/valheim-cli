@@ -48,7 +48,9 @@ its opening animation. Discover targets and click an inventory item, re-list,
 then click its destination; right-click uses the normal custom game handler.
 Scroll with `ui --ui-action scroll --target <id> --scroll -1`. Close inventory
 through the same inventory action. Standard buttons use their native submit
-path and bound listeners; no coordinates, OS keys or cursor movement are used.
+path and bound listeners. Controls with custom pointer handlers, including
+inventory cells, use native down/up/click events even when they also have a
+Button component. No coordinates, OS keys or cursor movement are used.
 Open the in-world pause menu with `action --action menu`, then select its
 buttons by ID. Menu screenshots also work without a local player. Text entry and IMGUI/UI
 Toolkit controls are not supported.

@@ -35,6 +35,7 @@ static class UiTests
         Assert(Protocol.Decode(Protocol.Encode(r)).target == first.id, "UI target schema failed");
         GameUi.Execute(r); Assert(clicks == 1, "Native submit did not invoke button listener");
         Refused(() => GameUi.Execute(r)); Assert(clicks == 1, "Consumed UI ID replayed");
+        r=Click(List().ui.Single().id); r.button="right"; Refused(()=>GameUi.Execute(r));
         var duplicate=new GameObject { name=o.name }; duplicate.transform.SiblingIndex=1;
         Attach(duplicate,new Canvas()); Attach(duplicate,new Button());
         Assert(List().ui.Select(c=>c.path).Distinct().Count()==2,"Repeated button names have ambiguous hierarchy paths"); duplicate.activeInHierarchy=false;
@@ -60,6 +61,12 @@ static class UiTests
         foreach(var type in new[]{typeof(IPointerDownHandler),typeof(IPointerUpHandler),typeof(IPointerClickHandler)}) o.Handlers[type]=d=>{Assert(((PointerEventData)d).pointerCurrentRaycast.gameObject==o,"Native raycast context lost");events.Add(type.Name);};
         GameUi.Execute(Click(List().ui.Single().id));
         Assert(events.SequenceEqual(new[]{"IPointerDownHandler","IPointerUpHandler","IPointerClickHandler"}),"Custom UI event order changed");
+        Attach(o,new Button());
+        foreach(var mouseButton in new[]{"left","right"})
+        {
+            events.Clear(); r=Click(List().ui.Single().id); r.button=mouseButton; GameUi.Execute(r);
+            Assert(events.SequenceEqual(new[]{"IPointerDownHandler","IPointerUpHandler","IPointerClickHandler"}),"Button component suppressed custom inventory events");
+        }
         UnityEngine.Object.Objects.Clear(); o=new GameObject(); Attach(o,new Canvas()); var submit=Attach(o,new ModSubmit());
         EventSystem.current.Hits.Clear(); EventSystem.current.Hits.Add(new(){gameObject=o});
         r=Click(List().ui.Single().id); r.button="right"; Refused(()=>GameUi.Execute(r));

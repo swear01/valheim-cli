@@ -104,7 +104,7 @@ namespace ValheimCliBridge
             };
             var o = target.Object;
             var button = o.GetComponent<Button>();
-            var standardButton = button != null && button.isActiveAndEnabled;
+            var standardButton = button != null && button.isActiveAndEnabled && !o.GetComponents<MonoBehaviour>().Any(c => c != null && c.isActiveAndEnabled && c is IPointerClickHandler && !(c is Button));
             var pointerHandler = ExecuteEvents.GetEventHandler<IPointerClickHandler>(o) == o;
             if (r.uiAction == "click" && data.button != PointerEventData.InputButton.Left && (standardButton || !pointerHandler))
                 throw new ActionRefusedException("This UI target only accepts left activation");
